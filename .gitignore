@@ -24,4 +24,5 @@ Thumbs.db
 
 # 评测输出（原始结果按需单独提交）
 evals/output/
+evals/reports/
 *.log
