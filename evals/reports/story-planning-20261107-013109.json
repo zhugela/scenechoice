@@ -1,0 +1,6144 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-11-06T17:31:09.353333+00:00",
+  "model": "deepseek-chat",
+  "episode_count": 3,
+  "structural_gate": {
+    "passed": 20,
+    "total": 20,
+    "threshold": 16,
+    "gate_passed": true
+  },
+  "manual_review_status": "pending",
+  "results": [
+    {
+      "id": "live_01",
+      "genre": "livestream",
+      "inspiration": "新人游戏主播误开全队麦，吐槽被恶意剪辑后必须找出幕后推手。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 15532,
+      "prompt_tokens": 1997,
+      "completion_tokens": 2240,
+      "blueprint": {
+        "title": "全队麦危机",
+        "logline": "新人主播小渔误开全队麦吐槽队友，被恶意剪辑成“毒瘤主播”，她必须在三天内找出幕后推手，否则职业生涯将毁于一旦。",
+        "genre": "悬疑/职场",
+        "theme": "信任与真相：在舆论风暴中坚守自我，用智慧揭露阴谋。",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "xiaoyu",
+            "name": "小渔",
+            "role": "新人游戏主播",
+            "goal": "找出恶意剪辑的幕后推手，洗清冤屈，保住直播生涯。",
+            "secret": "她私下录有完整队内语音，但内容包含她对平台管理层的无意冒犯。",
+            "personality": [
+              "直率",
+              "坚韧",
+              "有点莽撞"
+            ]
+          },
+          {
+            "id": "ajie",
+            "name": "阿杰",
+            "role": "小渔的搭档兼技术支持",
+            "goal": "帮助小渔度过危机，同时保护自己不被牵连。",
+            "secret": "他曾因过失泄露过小渔的直播推流码，但并非恶意。",
+            "personality": [
+              "谨慎",
+              "忠诚",
+              "技术宅"
+            ]
+          },
+          {
+            "id": "mengmeng",
+            "name": "萌萌",
+            "role": "同平台人气主播",
+            "goal": "维持自己一姐地位，暗中打压可能威胁她的新人。",
+            "secret": "她雇佣了水军团队剪辑并传播了小渔的负面视频。",
+            "personality": [
+              "表面亲和",
+              "心机深沉",
+              "嫉妒心强"
+            ]
+          },
+          {
+            "id": "laok",
+            "name": "老K",
+            "role": "平台运营主管",
+            "goal": "平息舆论，维护平台形象，必要时牺牲小主播。",
+            "secret": "他收受过萌萌的贿赂，为其提供流量倾斜。",
+            "personality": [
+              "圆滑",
+              "利益至上",
+              "老练"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "reputation",
+            "name": "公众声誉",
+            "description": "小渔在观众和平台眼中的形象，影响支持度。",
+            "initial_value": 50,
+            "low_label": "声名狼藉",
+            "high_label": "人气新星"
+          },
+          {
+            "id": "evidence",
+            "name": "证据链",
+            "description": "小渔收集到的能证明自己清白、指向幕后推手的证据强度。",
+            "initial_value": 10,
+            "low_label": "毫无头绪",
+            "high_label": "铁证如山"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "小渔在直播事故后首次公开回应，试图稳住粉丝并寻找线索。",
+            "conflict": "舆论持续发酵，黑粉攻击不断，而小渔手中只有一段模糊的录音。",
+            "character_ids": [
+              "xiaoyu",
+              "ajie",
+              "mengmeng"
+            ],
+            "required_events": [
+              "小渔发现被剪辑的视频登上平台热搜",
+              "阿杰帮忙分析视频来源，发现剪辑痕迹",
+              "萌萌假意安慰小渔，实则套话"
+            ],
+            "cliffhanger": "小渔在阿杰的帮助下，追踪到视频首发账号的IP指向平台内部。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "ep1_choice_1",
+                "text": "公开完整录音，澄清自己只是吐槽队友菜，没有恶意。",
+                "intent": "用真相挽回声誉，但可能暴露更多私人言论。",
+                "effects": [
+                  {
+                    "metric_id": "reputation",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "粉丝反应两极，但获得了部分理性观众的支持，然而录音中涉及平台管理层的言论被截取，引起老K注意。"
+              },
+              {
+                "id": "ep1_choice_2",
+                "text": "私下联系首发账号，试图用钱买下更多信息。",
+                "intent": "暗中调查，避免打草惊蛇。",
+                "effects": [
+                  {
+                    "metric_id": "reputation",
+                    "delta": -5
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "对方收了钱但只给了一条模糊线索，小渔的声誉因“私下交易”传闻进一步受损。"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "小渔深入调查，锁定嫌疑人萌萌，并设法获取关键证据。",
+            "conflict": "萌萌察觉被调查，开始销毁证据并反咬小渔炒作。",
+            "character_ids": [
+              "xiaoyu",
+              "ajie",
+              "mengmeng",
+              "laok"
+            ],
+            "required_events": [
+              "阿杰黑入平台后台，发现萌萌与水军团队的交易记录",
+              "萌萌在直播中含沙射影指责小渔卖惨",
+              "老K出面“调解”，暗示小渔息事宁人"
+            ],
+            "cliffhanger": "小渔拿到交易记录截图，但老K以“违规获取数据”为由威胁封禁她的账号。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "ep2_choice_1",
+                "text": "将证据匿名发给平台纪检部门，走正规渠道举报。",
+                "intent": "用合法手段维权，但可能被老K拦截。",
+                "effects": [
+                  {
+                    "metric_id": "reputation",
+                    "delta": 5
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "纪检部门受理但调查缓慢，老K得知后加快了对小渔的封杀流程。"
+              },
+              {
+                "id": "ep2_choice_2",
+                "text": "在直播中直接放出部分证据，引导粉丝施压平台。",
+                "intent": "利用舆论倒逼平台公正处理。",
+                "effects": [
+                  {
+                    "metric_id": "reputation",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "粉丝暴动，平台股价波动，老K被迫公开回应，但萌萌趁机销毁了更多证据。"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "小渔在最终对决中揭露萌萌和老K的勾结，赢回声誉。",
+            "conflict": "萌萌和老K联手反击，小渔的账号被暂时封禁，证据链面临被摧毁的风险。",
+            "character_ids": [
+              "xiaoyu",
+              "ajie",
+              "mengmeng",
+              "laok"
+            ],
+            "required_events": [
+              "阿杰恢复被删除的完整交易记录",
+              "小渔在第三方平台直播公开全部证据",
+              "平台总部介入调查，萌萌和老K被停职"
+            ],
+            "cliffhanger": null,
+            "resolution": "小渔的声誉得以恢复，平台整改，她因勇敢揭露黑幕获得更多关注，但直播行业的水依然很深。",
+            "choices": [
+              {
+                "id": "ep3_choice_1",
+                "text": "接受平台道歉，回归直播，用实力证明自己。",
+                "intent": "放下恩怨，专注内容。",
+                "effects": [
+                  {
+                    "metric_id": "reputation",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "小渔的人气暴涨，但萌萌的残余势力仍在暗中虎视眈眈。"
+              },
+              {
+                "id": "ep3_choice_2",
+                "text": "联合其他被欺压的小主播，成立维权联盟。",
+                "intent": "改变行业生态，防止类似事件。",
+                "effects": [
+                  {
+                    "metric_id": "reputation",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "联盟获得广泛支持，但小渔面临更多管理压力，直播时间减少。"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_high",
+            "title": "真相大白，逆风翻盘",
+            "summary": "小渔成功揭露萌萌和老K的阴谋，平台公开道歉并整改。小渔不仅洗清冤屈，还因勇敢维权成为行业标杆，粉丝数暴涨，直播事业更上一层楼。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "reputation",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "evidence",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_mixed",
+            "title": "惨胜如败，前路未卜",
+            "summary": "小渔虽然证明了清白，但平台为了自身声誉压制了事件热度，萌萌被开除但老K仅被调岗。小渔的声誉部分恢复，但直播行业潜规则依旧，她感到疲惫和迷茫。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "reputation",
+                "operator": "gte",
+                "value": 40
+              },
+              {
+                "metric_id": "evidence",
+                "operator": "gte",
+                "value": 40
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_low",
+            "title": "黯然退场，真相沉没",
+            "summary": "小渔的证据被平台删除，账号被永久封禁。萌萌和老K继续逍遥，小渔被迫离开直播行业，身心俱疲。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "reputation",
+                "operator": "lt",
+                "value": 40
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "live_02",
+      "genre": "livestream",
+      "inspiration": "带货主播发现样品与商品不符，在合同和观众信任之间选择。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 10357,
+      "prompt_tokens": 1993,
+      "completion_tokens": 1804,
+      "blueprint": {
+        "title": "信任的代价",
+        "logline": "当红带货主播林悦发现样品与商品不符，在合同违约金与观众信任之间，她必须做出选择。",
+        "genre": "都市职场",
+        "theme": "信任与利益的抉择",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_yue",
+            "name": "林悦",
+            "role": "带货主播",
+            "goal": "在事业与诚信之间找到平衡，保住观众信任",
+            "secret": "她曾因一次虚假宣传差点毁掉职业生涯，因此对信任格外敏感",
+            "personality": [
+              "坚韧",
+              "正直",
+              "有同理心"
+            ]
+          },
+          {
+            "id": "chen_feng",
+            "name": "陈峰",
+            "role": "品牌方代表",
+            "goal": "确保合作顺利进行，维护品牌利益",
+            "secret": "他知道样品与商品不符，但为了业绩选择隐瞒",
+            "personality": [
+              "精明",
+              "强势",
+              "利益至上"
+            ]
+          },
+          {
+            "id": "xiao_mei",
+            "name": "小美",
+            "role": "林悦的助理",
+            "goal": "保护林悦，帮助她做出正确决定",
+            "secret": "她偷偷录下了陈峰承认样品问题的对话",
+            "personality": [
+              "细心",
+              "忠诚",
+              "勇敢"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "trust",
+            "name": "观众信任",
+            "description": "观众对林悦的信任程度，影响她的长期口碑",
+            "initial_value": 70,
+            "low_label": "信任崩塌",
+            "high_label": "信任坚固"
+          },
+          {
+            "id": "career",
+            "name": "职业风险",
+            "description": "违约和品牌方施压带来的职业风险",
+            "initial_value": 30,
+            "low_label": "风险低",
+            "high_label": "风险高"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林悦在直播前发现样品与商品不符，面临第一次选择。",
+            "conflict": "陈峰施压要求按样品宣传，林悦担心观众失望。",
+            "character_ids": [
+              "lin_yue",
+              "chen_feng",
+              "xiao_mei"
+            ],
+            "required_events": [
+              "林悦检查样品时发现商品质量明显低于样品",
+              "陈峰暗示如果违约将面临高额赔偿",
+              "小美提醒林悦观众期待很高"
+            ],
+            "cliffhanger": "直播即将开始，林悦必须决定是否按样品宣传。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "choice_ep1_a",
+                "text": "按样品宣传，先完成直播",
+                "intent": "暂时妥协，保住合同",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "career",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "观众开始质疑，但合同暂时安全。"
+              },
+              {
+                "id": "choice_ep1_b",
+                "text": "在直播中说出实情",
+                "intent": "诚实面对观众，可能违约",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "career",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "观众赞赏诚实，但品牌方威胁起诉。"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林悦面对品牌方的报复和观众的质疑，寻找证据。",
+            "conflict": "陈峰否认问题并威胁公开违约，林悦需要证据反击。",
+            "character_ids": [
+              "lin_yue",
+              "chen_feng",
+              "xiao_mei"
+            ],
+            "required_events": [
+              "陈峰公开指责林悦违约，要求赔偿",
+              "小美拿出录音证据",
+              "林悦考虑是否公开录音"
+            ],
+            "cliffhanger": "林悦手握录音，但公开可能彻底得罪品牌方。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "choice_ep2_a",
+                "text": "公开录音，揭露真相",
+                "intent": "彻底与品牌方决裂，争取公众支持",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "career",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "公众支持林悦，但品牌方起诉索赔。"
+              },
+              {
+                "id": "choice_ep2_b",
+                "text": "私下与品牌方和解",
+                "intent": "避免公开冲突，保住事业",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "career",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "风波暂时平息，但观众感到被背叛。"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "林悦最终决定如何面对观众和品牌方，收束冲突。",
+            "conflict": "品牌方起诉，观众期待回应，林悦必须选择最终立场。",
+            "character_ids": [
+              "lin_yue",
+              "chen_feng",
+              "xiao_mei"
+            ],
+            "required_events": [
+              "品牌方正式起诉林悦违约",
+              "观众发起支持林悦的活动",
+              "林悦在直播中做最终声明"
+            ],
+            "cliffhanger": null,
+            "resolution": "林悦的最终选择决定了她的职业和观众信任的走向。",
+            "choices": [
+              {
+                "id": "choice_ep3_a",
+                "text": "坚持诚信，公开对抗品牌方",
+                "intent": "捍卫观众信任，不惜法律战",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "career",
+                    "delta": 25
+                  }
+                ],
+                "consequence_hint": "可能赢得公众支持，但面临巨额赔偿。"
+              },
+              {
+                "id": "choice_ep3_b",
+                "text": "妥协和解，退出直播行业",
+                "intent": "避免法律纠纷，但失去观众",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -25
+                  },
+                  {
+                    "metric_id": "career",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "风波平息，但信任彻底崩塌。"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_high",
+            "title": "信任的胜利",
+            "summary": "林悦坚持诚信，公开对抗品牌方，赢得观众支持，最终品牌方撤诉，她成为诚信带货的标杆。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 80
+              },
+              {
+                "metric_id": "career",
+                "operator": "lte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_low",
+            "title": "信任的崩塌",
+            "summary": "林悦选择妥协，观众感到被背叛，她的直播事业一落千丈，最终退出行业。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "lte",
+                "value": 30
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_mixed",
+            "title": "艰难的平衡",
+            "summary": "林悦在诚信与利益间艰难平衡，虽然保住部分观众信任，但事业受到重创，未来充满不确定性。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gt",
+                "value": 30
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 80
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "live_03",
+      "genre": "livestream",
+      "inspiration": "过气主播收到神秘榜一大哥的挑战，每次兑现承诺都会失去一位朋友。",
+      "structural_passed": true,
+      "attempts": 2,
+      "duration_ms": 22872,
+      "prompt_tokens": 6273,
+      "completion_tokens": 4506,
+      "blueprint": {
+        "title": "榜一大哥的赌约",
+        "logline": "过气主播林小葵收到神秘榜一大哥的挑战，每兑现一个承诺就失去一位朋友，她必须在流量与友情之间做出选择。",
+        "genre": "悬疑/情感",
+        "theme": "流量时代的友情代价",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_xiaokui",
+            "name": "林小葵",
+            "role": "过气主播",
+            "goal": "重回人气巅峰，摆脱过气标签",
+            "secret": "曾经为了流量出卖过闺蜜的隐私，导致闺蜜自杀未遂",
+            "personality": [
+              "渴望认可",
+              "内心愧疚",
+              "倔强"
+            ]
+          },
+          {
+            "id": "mystery_benefactor",
+            "name": "神秘榜一大哥",
+            "role": "匿名金主",
+            "goal": "通过挑战让林小葵体验失去朋友的痛苦，为死去的妹妹复仇",
+            "secret": "是林小葵前闺蜜的哥哥，妹妹因隐私泄露自杀身亡",
+            "personality": [
+              "冷酷",
+              "算计",
+              "执念"
+            ]
+          },
+          {
+            "id": "su_qing",
+            "name": "苏晴",
+            "role": "林小葵的现任闺蜜兼助理",
+            "goal": "帮助林小葵走出低谷，同时守护两人的友情",
+            "secret": "暗恋林小葵多年，但不敢表白",
+            "personality": [
+              "温柔",
+              "忠诚",
+              "敏感"
+            ]
+          },
+          {
+            "id": "chen_yang",
+            "name": "陈阳",
+            "role": "林小葵的前男友兼摄影师",
+            "goal": "与林小葵复合，重燃旧情",
+            "secret": "当初分手是因为发现林小葵出卖闺蜜，无法接受",
+            "personality": [
+              "念旧",
+              "正直",
+              "犹豫"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "popularity",
+            "name": "人气值",
+            "description": "林小葵的直播人气，影响她能否重回巅峰",
+            "initial_value": 30,
+            "low_label": "无人问津",
+            "high_label": "顶流主播"
+          },
+          {
+            "id": "friendship",
+            "name": "友情值",
+            "description": "林小葵与朋友之间的信任和情感纽带",
+            "initial_value": 70,
+            "low_label": "众叛亲离",
+            "high_label": "情比金坚"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林小葵接受榜一大哥的第一个挑战：直播中向苏晴借钱并公开转账记录，以证明友情。",
+            "conflict": "苏晴刚失业，经济拮据，林小葵若公开借钱会让她难堪；但拒绝挑战则失去翻红机会。",
+            "character_ids": [
+              "lin_xiaokui",
+              "su_qing",
+              "mystery_benefactor"
+            ],
+            "required_events": [
+              "神秘榜一大哥在直播间提出挑战，承诺巨额打赏",
+              "林小葵向苏晴开口借钱，苏晴犹豫后答应",
+              "直播公开转账记录后，苏晴收到大量网友嘲讽，愤然离场"
+            ],
+            "cliffhanger": "苏晴拉黑了林小葵的所有联系方式，榜一大哥发来消息：第一个朋友，失去。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "accept_challenge",
+                "text": "接受挑战，公开转账记录",
+                "intent": "牺牲友情换取人气",
+                "effects": [
+                  {
+                    "metric_id": "popularity",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "friendship",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "苏晴感到被利用，友情出现裂痕，但直播间人气飙升。"
+              },
+              {
+                "id": "refuse_challenge",
+                "text": "拒绝挑战，保护苏晴",
+                "intent": "守护友情放弃流量",
+                "effects": [
+                  {
+                    "metric_id": "popularity",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "friendship",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "榜一大哥嘲讽她懦弱，直播间人气下滑，但苏晴更加信任她。"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "第二个挑战：让陈阳在直播中承认还爱着林小葵，以此证明魅力。",
+            "conflict": "陈阳因过去的事对林小葵心存芥蒂，不愿配合；且直播表白会暴露隐私，让陈阳难堪。",
+            "character_ids": [
+              "lin_xiaokui",
+              "chen_yang",
+              "mystery_benefactor"
+            ],
+            "required_events": [
+              "榜一大哥提出新挑战，要求陈阳直播表白",
+              "林小葵约陈阳见面，试图说服他配合",
+              "陈阳在直播中被迫表白后，感到被利用，愤怒离去"
+            ],
+            "cliffhanger": "陈阳离开后，榜一大哥发来消息：第二个朋友，失去。林小葵发现榜一大哥的IP地址与苏晴家相近。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "force_chen_yang",
+                "text": "设计让陈阳在直播中说出心里话",
+                "intent": "不择手段完成挑战",
+                "effects": [
+                  {
+                    "metric_id": "popularity",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "friendship",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "陈阳当众表白后感到被算计，与林小葵彻底决裂。"
+              },
+              {
+                "id": "protect_chen_yang",
+                "text": "放弃挑战，向陈阳坦白一切",
+                "intent": "诚实面对过去，保护陈阳",
+                "effects": [
+                  {
+                    "metric_id": "popularity",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "friendship",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "陈阳得知真相后虽然生气，但理解她的苦衷，两人关系缓和。"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "最终挑战：林小葵必须揭露自己过去的黑历史，以此换取终极流量，但会彻底失去所有朋友。",
+            "conflict": "揭露黑历史会让她身败名裂，但完成挑战可能获得巨额打赏和翻红机会；同时她发现榜一大哥的真实身份是前闺蜜的哥哥。",
+            "character_ids": [
+              "lin_xiaokui",
+              "mystery_benefactor",
+              "su_qing",
+              "chen_yang"
+            ],
+            "required_events": [
+              "榜一大哥亮明身份，要求林小葵直播自曝黑历史",
+              "林小葵在直播前收到苏晴和陈阳的关心信息",
+              "林小葵在直播中做出最终选择"
+            ],
+            "cliffhanger": null,
+            "resolution": "根据林小葵的选择，她可能获得流量但众叛亲离，或守住友情但继续过气，或找到平衡。",
+            "choices": [
+              {
+                "id": "expose_truth",
+                "text": "直播自曝黑历史，完成挑战",
+                "intent": "用真相换取流量和救赎",
+                "effects": [
+                  {
+                    "metric_id": "popularity",
+                    "delta": 30
+                  },
+                  {
+                    "metric_id": "friendship",
+                    "delta": -30
+                  }
+                ],
+                "consequence_hint": "直播间人气爆棚，但苏晴和陈阳彻底失望，林小葵独自面对镜头。"
+              },
+              {
+                "id": "reject_benefactor",
+                "text": "拒绝挑战，公开榜一大哥的阴谋",
+                "intent": "揭露真相，守护友情",
+                "effects": [
+                  {
+                    "metric_id": "popularity",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "friendship",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "榜一大哥的阴谋被揭穿，林小葵人气下滑，但朋友们回到她身边。"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "lonely_star",
+            "title": "孤独的顶流",
+            "summary": "林小葵完成所有挑战，人气达到巅峰，但苏晴和陈阳都离开了她，她成为孤独的顶流主播，内心空虚。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "popularity",
+                "operator": "gte",
+                "value": 80
+              },
+              {
+                "metric_id": "friendship",
+                "operator": "lte",
+                "value": 30
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "true_friends",
+            "title": "平凡的真朋友",
+            "summary": "林小葵拒绝所有挑战，人气跌入谷底，但苏晴和陈阳始终陪伴，她找回了真实的自己，三人一起经营小直播间，其乐融融。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "popularity",
+                "operator": "lte",
+                "value": 30
+              },
+              {
+                "metric_id": "friendship",
+                "operator": "gte",
+                "value": 80
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "mixed_bittersweet",
+            "title": "苦涩的平衡",
+            "summary": "林小葵在最终选择中公开了榜一大哥的阴谋，人气有所下滑但未至谷底，苏晴和陈阳选择原谅她，三人关系微妙，未来充满不确定。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "popularity",
+                "operator": "gte",
+                "value": 40
+              },
+              {
+                "metric_id": "friendship",
+                "operator": "gte",
+                "value": 40
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "game_01",
+      "genre": "gaming",
+      "inspiration": "电竞替补在决赛前发现首发使用作弊脚本，却只有一段不完整录像。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 14019,
+      "prompt_tokens": 1995,
+      "completion_tokens": 1781,
+      "blueprint": {
+        "title": "残局脚本",
+        "logline": "决赛前夜，替补选手林野拿到一段不完整的作弊录像，他必须在揭发首发、保护战队与守住自己上场机会之间做出选择。",
+        "genre": "电竞悬疑",
+        "theme": "真相与代价：当证据不完整时，正义是否仍值得冒险",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_ye",
+            "name": "林野",
+            "role": "战队替补中单，长期被首发压制",
+            "goal": "查清录像真相，同时不让自己被战队彻底弃用",
+            "secret": "他曾偷偷拷贝过首发电脑的训练日志，却一直不敢公开",
+            "personality": [
+              "冷静",
+              "执拗",
+              "自尊心强"
+            ]
+          },
+          {
+            "id": "zhou_kai",
+            "name": "周凯",
+            "role": "战队首发中单，明星选手",
+            "goal": "稳住决赛首发位置，掩盖脚本使用痕迹",
+            "secret": "脚本由他前队友提供，他只用过两次，却足以改变关键对局",
+            "personality": [
+              "自负",
+              "擅于操控舆论",
+              "临场冷静"
+            ]
+          },
+          {
+            "id": "su_qing",
+            "name": "苏晴",
+            "role": "战队数据分析师，林野唯一可信任的人",
+            "goal": "还原录像完整链路，避免战队被联盟清算",
+            "secret": "她早就怀疑周凯，却因害怕失业而删过一段监控",
+            "personality": [
+              "谨慎",
+              "技术敏锐",
+              "厌恶冲突"
+            ]
+          },
+          {
+            "id": "chen_bo",
+            "name": "陈博",
+            "role": "战队经理",
+            "goal": "拿下冠军并保住赞助，不惜压下任何丑闻",
+            "secret": "他收到过匿名举报邮件，却选择删除并隐瞒",
+            "personality": [
+              "圆滑",
+              "功利",
+              "掌控欲强"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "evidence_strength",
+            "name": "证据强度",
+            "description": "林野掌握的作弊证据是否完整、可信、可提交联盟",
+            "initial_value": 20,
+            "low_label": "碎片难立",
+            "high_label": "铁证如山"
+          },
+          {
+            "id": "team_trust",
+            "name": "队内信任",
+            "description": "队友与经理对林野的信任程度，影响他能否留在战队",
+            "initial_value": 45,
+            "low_label": "众叛亲离",
+            "high_label": "并肩作战"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林野在决赛前夜发现周凯的作弊录像，并判断录像是否可信",
+            "conflict": "录像只有十二秒且关键帧缺失，周凯反咬林野伪造证据",
+            "character_ids": [
+              "lin_ye",
+              "zhou_kai",
+              "su_qing",
+              "chen_bo"
+            ],
+            "required_events": [
+              "林野在训练室公用电脑缓存中发现一段决赛前训练录像",
+              "录像显示周凯屏幕出现异常脚本弹窗，但关键操作段被截断",
+              "陈博要求林野交出录像并承诺内部处理"
+            ],
+            "cliffhanger": "苏晴告诉林野，原始录像可能还存在于被删除的监控备份里",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "copy_evidence",
+                "text": "偷偷备份录像并找苏晴做技术鉴定",
+                "intent": "优先保全证据，私下调查",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "证据更扎实，但私自备份会让经理怀疑林野别有用心"
+              },
+              {
+                "id": "report_to_manager",
+                "text": "把录像交给陈博，要求战队内部调查",
+                "intent": "走正规渠道，避免队内撕裂",
+                "effects": [
+                  {
+                    "metric_id": "team_trust",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "经理表面支持，录像却可能被压进抽屉"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林野与苏晴追查录像原始来源，同时应对周凯的舆论反击",
+            "conflict": "周凯在队内散布林野抢首发的谣言，联盟赛前审查即将开始",
+            "character_ids": [
+              "lin_ye",
+              "zhou_kai",
+              "su_qing",
+              "chen_bo"
+            ],
+            "required_events": [
+              "苏晴恢复部分监控备份，发现周凯赛前曾单独留在训练室",
+              "周凯在队内会议公开暗示林野因嫉妒伪造证据",
+              "联盟赛前设备审查通知送达，战队必须提交训练机日志"
+            ],
+            "cliffhanger": "提交日志前，陈博要求林野签字确认设备无异常",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "expose_in_meeting",
+                "text": "在队内会议公开部分恢复的监控与时间线",
+                "intent": "当众施压，逼周凯露出破绽",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "周凯阵脚大乱，但队友开始把林野视为破坏决赛的人"
+              },
+              {
+                "id": "secret_verify",
+                "text": "先拒绝签字，与苏晴私下完成日志比对",
+                "intent": "拿到完整证据再摊牌",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "证据链更完整，但拒绝签字让经理暂时冻结林野的训练权限"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "在决赛开始前决定是否向联盟提交证据，并承担最终后果",
+            "conflict": "证据仍缺最后一环，周凯以退赛威胁战队，陈博逼林野在开赛前做选择",
+            "character_ids": [
+              "lin_ye",
+              "zhou_kai",
+              "su_qing",
+              "chen_bo"
+            ],
+            "required_events": [
+              "苏晴完成日志比对，确认脚本进程与周凯账号匹配",
+              "周凯威胁若被举报就罢赛，让战队不战而败",
+              "联盟审查员在决赛场馆外等待最终材料"
+            ],
+            "cliffhanger": null,
+            "resolution": "林野在开赛前做出最终选择，战队命运与个人前途同时被推上赌桌",
+            "choices": [
+              {
+                "id": "submit_to_league",
+                "text": "把完整证据链提交联盟审查员",
+                "intent": "以规则终结作弊，接受任何代价",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "联盟介入，战队可能被取消资格，但真相不会被掩埋"
+              },
+              {
+                "id": "force_confession",
+                "text": "给周凯最后一次机会，逼他赛前主动退赛并公开道歉",
+                "intent": "保住战队参赛资格，同时让作弊者自己承担",
+                "effects": [
+                  {
+                    "metric_id": "team_trust",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "周凯若拒绝，林野将失去最后提交窗口，风险极高"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "iron_evidence",
+            "title": "铁证之后",
+            "summary": "林野提交完整证据，联盟取消周凯资格并调查战队。林野虽失去本届决赛，却以清白之身获得下赛季首发承诺，战队在阵痛后重建。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "evidence_strength",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "team_trust",
+                "operator": "gte",
+                "value": 25
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "silent_bench",
+            "title": "沉默的替补",
+            "summary": "证据不足且队内信任崩塌，林野被按在替补席上看着周凯捧杯。赛后联盟抽查无果，林野带着未说出口的真相离队。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "evidence_strength",
+                "operator": "lt",
+                "value": 50
+              },
+              {
+                "metric_id": "team_trust",
+                "operator": "lt",
+                "value": 30
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "forced_confession",
+            "title": "赛前自白",
+            "summary": "周凯在最后时刻被迫退赛并公开道歉，战队临时换林野上场。他们输掉决赛，却保住了参赛资格，林野也在争议中证明了自己。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "team_trust",
+                "operator": "gte",
+                "value": 40
+              },
+              {
+                "metric_id": "evidence_strength",
+                "operator": "gte",
+                "value": 40
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "burned_bridge",
+            "title": "焚桥者",
+            "summary": "林野提交证据，但队内信任彻底破裂。联盟处罚周凯的同时，战队以违反内部流程为由与林野解约，他成为圈内争议人物。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "evidence_strength",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "team_trust",
+                "operator": "lt",
+                "value": 25
+              }
+            ],
+            "priority": 4
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "game_02",
+      "genre": "gaming",
+      "inspiration": "游戏公会会长醒来发现仓库被清空，而嫌疑人都是陪他多年的队友。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 13343,
+      "prompt_tokens": 1995,
+      "completion_tokens": 1634,
+      "blueprint": {
+        "title": "空仓之夜",
+        "logline": "公会会长一觉醒来发现仓库被洗劫一空，三名陪伴多年的队友都有嫌疑，他必须在信任崩塌前找出真相。",
+        "genre": "悬疑/情感",
+        "theme": "信任与背叛之间，真相往往比想象更复杂",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_zhou",
+            "name": "林舟",
+            "role": "公会会长",
+            "goal": "查明仓库被清空的真相，同时保住公会不散",
+            "secret": "他曾在三个月前私自挪用公会资金救急，一直未向队友坦白",
+            "personality": [
+              "重情义",
+              "优柔寡断",
+              "责任感强"
+            ]
+          },
+          {
+            "id": "su_yue",
+            "name": "苏月",
+            "role": "副会长兼仓库管理员",
+            "goal": "证明自己的清白，维护自己多年来的付出",
+            "secret": "她掌握仓库权限日志，但其中有一段记录显示她深夜登录过",
+            "personality": [
+              "冷静",
+              "自尊心强",
+              "嘴硬心软"
+            ]
+          },
+          {
+            "id": "dahai",
+            "name": "大海",
+            "role": "主力输出兼现实中的老友",
+            "goal": "保护林舟不被打击，同时掩盖自己现实的困境",
+            "secret": "他欠下巨额债务，曾向人透露过仓库密码换取借款",
+            "personality": [
+              "豪爽",
+              "冲动",
+              "讲义气"
+            ]
+          },
+          {
+            "id": "xiaoqi",
+            "name": "小七",
+            "role": "新晋管理，入会仅半年",
+            "goal": "在公会中站稳脚跟，获得林舟的完全信任",
+            "secret": "他是竞争对手公会派来的卧底，但已对公会产生感情",
+            "personality": [
+              "机灵",
+              "谨慎",
+              "渴望被认可"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "trust",
+            "name": "团队信任",
+            "description": "队友之间的信任程度，过低会导致公会分裂",
+            "initial_value": 60,
+            "low_label": "分崩离析",
+            "high_label": "坚不可摧"
+          },
+          {
+            "id": "truth",
+            "name": "真相进度",
+            "description": "接近仓库被清空真相的程度",
+            "initial_value": 10,
+            "low_label": "迷雾重重",
+            "high_label": "水落石出"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林舟发现仓库被清空，召集队友对质，初步排查嫌疑人",
+            "conflict": "三人各有疑点，苏月拒绝交出权限日志，大海情绪激动，小七显得过于镇定",
+            "character_ids": [
+              "lin_zhou",
+              "su_yue",
+              "dahai",
+              "xiaoqi"
+            ],
+            "required_events": [
+              "林舟登录游戏发现仓库空空如也，稀有材料与金币全部消失",
+              "苏月承认自己深夜登录过仓库但拒绝解释原因",
+              "大海在争执中失言提到'密码'二字后慌忙掩饰"
+            ],
+            "cliffhanger": "林舟在仓库角落发现一枚不属于任何人的公会徽章碎片",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "press_su_yue",
+                "text": "当众要求苏月交出权限日志",
+                "intent": "用强硬手段逼出关键证据",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "苏月感到被羞辱，日志虽交出但团队裂痕加深"
+              },
+              {
+                "id": "calm_mediation",
+                "text": "先安抚众人，私下分别谈话",
+                "intent": "稳住局面，避免正面冲突",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "truth",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "气氛缓和，但真相推进缓慢，有人趁机销毁线索"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "根据徽章碎片与日志线索深入调查，锁定关键嫌疑人",
+            "conflict": "日志显示苏月登录时间与失窃时间吻合，但大海的债务问题和小七的可疑背景同时浮出水面",
+            "character_ids": [
+              "lin_zhou",
+              "su_yue",
+              "dahai",
+              "xiaoqi"
+            ],
+            "required_events": [
+              "林舟比对日志发现苏月登录时段与失窃时间高度重合",
+              "大海的债主在游戏内私聊林舟，暗示'有人用仓库抵债'",
+              "小七被发现在失窃当晚与陌生账号有频繁交易记录"
+            ],
+            "cliffhanger": "林舟收到匿名邮件，附有一段仓库操作录像，画面中的人影穿着副会长制服",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_su_yue",
+                "text": "拿着录像直接质问苏月",
+                "intent": "逼苏月当面解释录像内容",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "苏月含泪承认录像中的人是她，但坚称自己被利用"
+              },
+              {
+                "id": "trace_anonymous",
+                "text": "暂不声张，追查匿名邮件来源",
+                "intent": "找出幕后发件人，顺藤摸瓜",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "追查发现邮件来自小七的备用账号，真相出现反转"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "揭开仓库被清空的全部真相，决定公会的未来",
+            "conflict": "真相指向小七与外部势力勾结，但小七坦白自己早已后悔并暗中留下证据；大海的债务问题也需要面对",
+            "character_ids": [
+              "lin_zhou",
+              "su_yue",
+              "dahai",
+              "xiaoqi"
+            ],
+            "required_events": [
+              "小七承认卧底身份，但交出竞争对手公会的完整计划书作为投名状",
+              "大海坦白自己泄露密码的经过，愿意承担责任",
+              "林舟公开自己挪用公款的旧事，请求队友原谅"
+            ],
+            "cliffhanger": null,
+            "resolution": "林舟与队友们共同决定重建仓库，公会经历风波后反而更加团结，但每个人心中都留下了无法完全抹去的疤痕",
+            "choices": [
+              {
+                "id": "forgive_all",
+                "text": "原谅所有人，公会重新开始",
+                "intent": "选择信任与包容，给每个人第二次机会",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 25
+                  },
+                  {
+                    "metric_id": "truth",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "团队信任大幅回升，但部分成员对未追究责任心存不满"
+              },
+              {
+                "id": "rebuild_strict",
+                "text": "重建公会，但设立严格制度并追责",
+                "intent": "用规则约束人性，防止悲剧重演",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "制度完善了，但队友之间多了隔阂，再也回不到从前"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_broken_guild",
+            "title": "散伙饭",
+            "summary": "信任彻底崩塌，队友们各奔东西。仓库里的东西可以重新刷，但一起熬夜打本的日子再也回不来了。林舟独自站在空荡荡的公会大厅，屏幕上的好友列表一个个变灰。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 30
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_rebuild_together",
+            "title": "空仓之后",
+            "summary": "真相水落石出，每个人都为自己的错误付出了代价，也选择了原谅。仓库重新填满的那天，林舟在公会公告栏写下：'这次，我们一起守着。'公会人数不减反增。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 70
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_fragile_peace",
+            "title": "裂痕之下",
+            "summary": "仓库找回了大部分物资，公会也勉强维持了下去。但每次开会时，总有人欲言又止。林舟知道，有些东西碎了就是碎了，粘得再好也有缝。他们还在同一个公会，却不再是无话不谈的队友。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 30
+              },
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "game_03",
+      "genre": "gaming",
+      "inspiration": "落魄玩家在旧街机里打出的每个选择都会改变现实中的小镇。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 11449,
+      "prompt_tokens": 1994,
+      "completion_tokens": 1452,
+      "blueprint": {
+        "title": "街机回声",
+        "logline": "落魄玩家阿凯在旧街机厅打出的每个选择，都会改写现实中衰败小镇的命运，他必须在游戏与真实之间做出最后的抉择。",
+        "genre": "都市奇幻",
+        "theme": "选择的重量与对失去之物的执念",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "akai",
+            "name": "阿凯",
+            "role": "落魄的前电竞选手，回到故乡小镇",
+            "goal": "通过旧街机找回失去的人生掌控感，并弄清游戏与现实的联系",
+            "secret": "三年前他因一次赛场误判选择退赛，从此逃避一切选择",
+            "personality": [
+              "倔强",
+              "敏感",
+              "善于观察"
+            ]
+          },
+          {
+            "id": "xiaoyu",
+            "name": "小雨",
+            "role": "街机厅老板的孙女，小镇图书管理员",
+            "goal": "保住祖父留下的街机厅，阻止小镇被拆迁改造成商业区",
+            "secret": "她早已发现街机与现实相连，却一直隐瞒，怕被人当成疯子",
+            "personality": [
+              "温柔",
+              "执着",
+              "有秘密"
+            ]
+          },
+          {
+            "id": "laozhou",
+            "name": "老周",
+            "role": "街机厅老板，沉默的老人",
+            "goal": "守住街机厅直到找到能接替自己的人",
+            "secret": "街机是他年轻时与一位朋友共同制造的实验装置，能映射人的选择",
+            "personality": [
+              "寡言",
+              "睿智",
+              "内疚"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "town_vitality",
+            "name": "小镇生机",
+            "description": "小镇的活力与人气，从冷清衰败到重焕生机",
+            "initial_value": 30,
+            "low_label": "死寂荒镇",
+            "high_label": "烟火复苏"
+          },
+          {
+            "id": "akai_resolve",
+            "name": "阿凯的决心",
+            "description": "阿凯面对选择与责任的勇气",
+            "initial_value": 20,
+            "low_label": "逃避沉沦",
+            "high_label": "直面担当"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "阿凯回到小镇，在旧街机厅里打出第一局，发现现实随之改变",
+            "conflict": "阿凯只想逃避现实，而街机屏幕上的选择开始影响街对面的店铺",
+            "character_ids": [
+              "akai",
+              "xiaoyu",
+              "laozhou"
+            ],
+            "required_events": [
+              "阿凯在街机厅遇见小雨，得知街机厅即将被拆迁",
+              "游戏中选择帮助NPC，现实中街对面的面包店重新亮灯"
+            ],
+            "cliffhanger": "阿凯发现游戏里的地图与小镇一模一样，而下一个关卡的名字是'你的过去'",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "help_npc",
+                "text": "在游戏里帮助被困的NPC",
+                "intent": "选择善意与介入",
+                "effects": [
+                  {
+                    "metric_id": "town_vitality",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "akai_resolve",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "现实中面包店重新亮灯，街坊开始议论小镇的变化"
+              },
+              {
+                "id": "ignore_npc",
+                "text": "无视NPC，快速通关",
+                "intent": "选择效率与逃避",
+                "effects": [
+                  {
+                    "metric_id": "town_vitality",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "akai_resolve",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "街机厅外的路灯熄灭，小雨露出失望的神情"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "阿凯追查街机的秘密，必须在一次关键选择中决定是否公开真相",
+            "conflict": "老周警告他停止游戏，小雨却希望他继续改变小镇，而拆迁队已经进场",
+            "character_ids": [
+              "akai",
+              "xiaoyu",
+              "laozhou"
+            ],
+            "required_events": [
+              "老周坦白街机是能映射选择的装置，并警告代价",
+              "拆迁队开始测量街机厅，小雨与工人争执",
+              "游戏中的关键关卡要求阿凯选择'牺牲自己'或'牺牲小镇'"
+            ],
+            "cliffhanger": "阿凯在游戏里看到三年前退赛那天的画面，街机屏幕开始闪烁",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "sacrifice_self",
+                "text": "在游戏中牺牲角色，保全小镇",
+                "intent": "选择自我承担",
+                "effects": [
+                  {
+                    "metric_id": "town_vitality",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "akai_resolve",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "小镇停电一夜后恢复，但阿凯开始出现记忆模糊"
+              },
+              {
+                "id": "sacrifice_town",
+                "text": "牺牲小镇场景，换取通关",
+                "intent": "选择保全自己",
+                "effects": [
+                  {
+                    "metric_id": "town_vitality",
+                    "delta": -20
+                  },
+                  {
+                    "metric_id": "akai_resolve",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "街机厅的窗户碎裂，小雨不再与他说话"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "阿凯面对街机的最终关卡，必须决定是否用最后的选择改写小镇与自己的命运",
+            "conflict": "最终关卡要求他重演三年前的退赛选择，而这一次代价是整个小镇",
+            "character_ids": [
+              "akai",
+              "xiaoyu",
+              "laozhou"
+            ],
+            "required_events": [
+              "阿凯在最终关卡前与小雨和解或决裂，取决于之前的信任",
+              "老周揭示街机即将耗尽，最后一次选择将决定它的存亡",
+              "阿凯在游戏与现实中同时按下决定键"
+            ],
+            "cliffhanger": null,
+            "resolution": "街机的光芒熄灭，小镇的命运与阿凯的选择一同定格",
+            "choices": [
+              {
+                "id": "final_stand",
+                "text": "选择直面过去，用最后一局改写小镇命运",
+                "intent": "承担与救赎",
+                "effects": [
+                  {
+                    "metric_id": "akai_resolve",
+                    "delta": 25
+                  },
+                  {
+                    "metric_id": "town_vitality",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "街机屏幕亮起最后一行字：'你终于选择了自己'"
+              },
+              {
+                "id": "final_escape",
+                "text": "拔掉电源，拒绝再做选择",
+                "intent": "逃避与放手",
+                "effects": [
+                  {
+                    "metric_id": "akai_resolve",
+                    "delta": -25
+                  },
+                  {
+                    "metric_id": "town_vitality",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "街机厅陷入黑暗，小镇的灯光一盏盏熄灭"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_revival",
+            "title": "烟火复苏",
+            "summary": "阿凯直面过去，小镇重焕生机，街机厅成为小镇新的精神地标，他留下来接替老周。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "town_vitality",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "akai_resolve",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_ashes",
+            "title": "灰烬小镇",
+            "summary": "阿凯一再逃避，小镇彻底衰败，街机厅被拆除，他带着遗憾离开故乡。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "town_vitality",
+                "operator": "lt",
+                "value": 30
+              },
+              {
+                "metric_id": "akai_resolve",
+                "operator": "lt",
+                "value": 40
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_echo",
+            "title": "回声未散",
+            "summary": "阿凯做出了选择，却无法两全：小镇保住了部分生机，而他失去了某些记忆，街机的秘密随老周一同消失。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "akai_resolve",
+                "operator": "gte",
+                "value": 40
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "mystery_01",
+      "genre": "mystery",
+      "inspiration": "深夜便利店每天多出一张不存在商品的小票，店员决定追查顾客身份。",
+      "structural_passed": true,
+      "attempts": 2,
+      "duration_ms": 28902,
+      "prompt_tokens": 6684,
+      "completion_tokens": 5332,
+      "blueprint": {
+        "title": "小票上的幽灵",
+        "logline": "深夜便利店每天多出一张不存在商品的小票，店员追查顾客身份，却发现小票来自未来的自己。",
+        "genre": "悬疑 / 科幻",
+        "theme": "面对无法解释的异常，执着追查与放手释怀都是选择，但真相往往藏在自我认知的裂缝里。",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_xia",
+            "name": "林夏",
+            "role": "深夜便利店店员，故事主角",
+            "goal": "查明神秘小票的来源和顾客身份，解开每晚多出一张小票的谜团。",
+            "secret": "她曾因过度执着于真相而间接导致前男友离开，内心深处害怕再次因为偏执失去重要的人。",
+            "personality": [
+              "好奇心强",
+              "执着",
+              "容易焦虑"
+            ]
+          },
+          {
+            "id": "chen_mo",
+            "name": "陈默",
+            "role": "常来深夜便利店的神秘顾客，身份成谜",
+            "goal": "阻止林夏继续追查小票，避免时间线出现不可控的悖论。",
+            "secret": "他是来自未来的林夏的同事，受未来林夏之托回来销毁小票痕迹。",
+            "personality": [
+              "沉默寡言",
+              "谨慎",
+              "内心矛盾"
+            ]
+          },
+          {
+            "id": "zhou_jie",
+            "name": "周姐",
+            "role": "便利店店长，林夏的上级",
+            "goal": "维持便利店正常运营，不希望林夏因为怪事影响工作。",
+            "secret": "她早就注意到小票异常，但选择视而不见，因为她年轻时也遇到过类似事件并选择了逃避。",
+            "personality": [
+              "务实",
+              "保守",
+              "刀子嘴豆腐心"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "curiosity",
+            "name": "追查执念",
+            "description": "林夏对神秘小票真相的追查程度，越高越接近真相但风险越大。",
+            "initial_value": 40,
+            "low_label": "淡然处之",
+            "high_label": "走火入魔"
+          },
+          {
+            "id": "trust",
+            "name": "人际信任",
+            "description": "林夏与陈默、周姐之间的信任关系，影响结局走向。",
+            "initial_value": 50,
+            "low_label": "孤军奋战",
+            "high_label": "彼此依靠"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "发现并初步调查神秘小票，锁定可疑顾客。",
+            "conflict": "林夏想追查小票，但店长周姐警告她不要多管闲事，而神秘顾客陈默似乎刻意回避她。",
+            "character_ids": [
+              "lin_xia",
+              "chen_mo",
+              "zhou_jie"
+            ],
+            "required_events": [
+              "林夏在夜班结账时发现一张小票，商品栏写着‘回忆罐头’，但店内从未卖过此商品。",
+              "林夏调取监控，发现每晚同一时间都有一个模糊身影在收银台前停留，但画面总是恰好卡顿。",
+              "陈默在凌晨三点进店买烟，林夏试探询问，陈默神色异常并匆忙离开。"
+            ],
+            "cliffhanger": "林夏在垃圾桶里翻到一张被撕碎的小票，拼凑后发现背面用红笔写着：‘别查了，你会后悔。’",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "ep1_follow_chen",
+                "text": "悄悄尾随陈默，看他到底去了哪里。",
+                "intent": "主动追查，试图从陈默身上找到突破口。",
+                "effects": [
+                  {
+                    "metric_id": "curiosity",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "你跟着陈默拐进小巷，却发现他消失在一面墙前，墙上用粉笔写着你的名字。"
+              },
+              {
+                "id": "ep1_ask_zhou",
+                "text": "直接问周姐是否知道小票的事。",
+                "intent": "寻求店长的帮助或信息，走稳妥路线。",
+                "effects": [
+                  {
+                    "metric_id": "curiosity",
+                    "delta": 5
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "周姐叹了口气，说：‘十年前也有人问过一样的问题，后来他再也没来过。’"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "深入调查小票的物理来源，发现时间异常的证据。",
+            "conflict": "林夏发现小票上的商品编码指向未来日期，而陈默主动摊牌但要求她停止调查，两人发生信任危机。",
+            "character_ids": [
+              "lin_xia",
+              "chen_mo",
+              "zhou_jie"
+            ],
+            "required_events": [
+              "林夏扫描小票上的条形码，系统显示‘商品不存在’，但编码规则指向三年后的日期。",
+              "陈默再次出现，警告林夏：‘你继续查下去，会害了你自己。’林夏逼问他的身份。",
+              "周姐在仓库里找到一箱旧物，里面有一张十年前的员工合照，角落里有年轻时的陈默。"
+            ],
+            "cliffhanger": "陈默被逼急后脱口而出：‘因为那张小票是你自己买的！’",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "ep2_believe_chen",
+                "text": "选择相信陈默，和他一起想办法阻止未来发生。",
+                "intent": "放下部分执念，建立信任，合作解决问题。",
+                "effects": [
+                  {
+                    "metric_id": "curiosity",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "陈默松了一口气，递给你一个U盘：‘这里面是未来你留给我的信息。’"
+              },
+              {
+                "id": "ep2_force_truth",
+                "text": "不管陈默的警告，自己破解小票编码，找到发送源头。",
+                "intent": "坚持独立追查，不依赖他人。",
+                "effects": [
+                  {
+                    "metric_id": "curiosity",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "你成功定位到信号源——就在便利店地下仓库，但那里有一扇从未见过的铁门。"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "面对来自未来的自己，决定如何处理小票和时间线。",
+            "conflict": "林夏在仓库铁门后遇到了来自未来的自己，未来林夏恳求她销毁所有小票，否则时间线会崩溃；而陈默和周姐各自给出了不同的建议。",
+            "character_ids": [
+              "lin_xia",
+              "chen_mo",
+              "zhou_jie"
+            ],
+            "required_events": [
+              "林夏打开铁门，里面是一台老旧的打印机，正在自动打印小票，而打印机旁坐着一个和她长得一模一样的人。",
+              "未来林夏解释：她为了给过去的自己传递信息，利用便利店的时间裂缝发送小票，但裂缝正在扩大，可能吞没整条街。",
+              "周姐坦白她年轻时也见过时间裂缝，但选择了无视，现在她愿意帮忙，前提是林夏做出决定。"
+            ],
+            "cliffhanger": null,
+            "resolution": "林夏必须在小票的真相、人际信任和时间线的稳定之间做出最终选择。",
+            "choices": [
+              {
+                "id": "ep3_destroy_printer",
+                "text": "销毁打印机，关闭时间裂缝，让一切回归正常。",
+                "intent": "以大局为重，牺牲真相和未来联系，保护现实。",
+                "effects": [
+                  {
+                    "metric_id": "curiosity",
+                    "delta": -20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "打印机在火焰中化为灰烬，裂缝缓缓闭合，但未来林夏的身影逐渐透明，她对你说了声‘谢谢’。"
+              },
+              {
+                "id": "ep3_keep_connection",
+                "text": "保留打印机，但和未来自己约定定期沟通，控制裂缝规模。",
+                "intent": "保留真相和未来连接，寻求平衡。",
+                "effects": [
+                  {
+                    "metric_id": "curiosity",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "未来林夏微笑着点头，但陈默皱眉提醒：‘裂缝不会永远听话。’"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_oblivion",
+            "title": "遗忘的日常",
+            "summary": "林夏销毁了打印机，时间裂缝关闭，小票不再出现。她继续在便利店上夜班，但偶尔会想起那个和自己一模一样的人。陈默和周姐都松了一口气，生活回归平静。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "curiosity",
+                "operator": "lt",
+                "value": 30
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_fracture",
+            "title": "裂缝失控",
+            "summary": "林夏执意保留打印机并频繁与未来沟通，时间裂缝不断扩大，最终吞噬了便利店。林夏在混乱中消失，只留下一张打印着‘欢迎来到时间之外’的小票。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "curiosity",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 40
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_balance",
+            "title": "平衡的守夜人",
+            "summary": "林夏与未来自己达成默契，定期维护裂缝并销毁多余小票。她和陈默、周姐成了时间裂缝的守护者，便利店成了秘密的观测站。生活多了一份责任，但也多了一份羁绊。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "curiosity",
+                "operator": "gte",
+                "value": 40
+              },
+              {
+                "metric_id": "curiosity",
+                "operator": "lte",
+                "value": 70
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "ending_truth",
+            "title": "真相大白",
+            "summary": "林夏在陈默和周姐的帮助下，彻底解析了时间裂缝的原理，并找到了安全关闭裂缝且保留记忆的方法。未来林夏得以回到自己的时间线，两人约定在真正的未来相见。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "curiosity",
+                "operator": "lte",
+                "value": 60
+              }
+            ],
+            "priority": 4
+          },
+          {
+            "id": "ending_echo",
+            "title": "回响",
+            "summary": "林夏选择销毁打印机，但偷偷保留了一张小票作为纪念。多年后她成为店长，某天夜班时，收银台又吐出一张写着‘回忆罐头’的小票，背面是年轻自己的笔迹：‘别查了，你会后悔。’",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "curiosity",
+                "operator": "gte",
+                "value": 30
+              },
+              {
+                "metric_id": "curiosity",
+                "operator": "lte",
+                "value": 50
+              }
+            ],
+            "priority": 5
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "mystery_02",
+      "genre": "mystery",
+      "inspiration": "摄影师收到三张未来事故照片，第三张里的人正是自己。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 14763,
+      "prompt_tokens": 1991,
+      "completion_tokens": 2287,
+      "blueprint": {
+        "title": "第三张底片",
+        "logline": "落魄摄影师收到三张预言事故的宝丽来照片，前两张应验后，他发现第三张里倒在废墟中的人正是自己。",
+        "genre": "悬疑 / 惊悚",
+        "theme": "面对被预告的死亡，是逃避宿命还是亲手改写结局",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_mo",
+            "name": "林默",
+            "role": "落魄的纪实摄影师，靠打零工维生",
+            "goal": "找出照片来源，阻止第三张照片中的事故，活下去",
+            "secret": "三年前他因抢拍独家新闻间接害死一名同行，从此封镜",
+            "personality": [
+              "敏锐",
+              "执拗",
+              "自我怀疑"
+            ]
+          },
+          {
+            "id": "su_wan",
+            "name": "苏晚",
+            "role": "事故调查科警员，也是林默的前女友",
+            "goal": "查清连环事故真相，同时保护林默",
+            "secret": "她早已收到匿名举报，怀疑照片与一个复仇计划有关",
+            "personality": [
+              "冷静",
+              "果决",
+              "念旧"
+            ]
+          },
+          {
+            "id": "chen_jiu",
+            "name": "陈九",
+            "role": "地下暗房主人，能冲洗出“未来影像”的神秘老人",
+            "goal": "引导林默做出选择，完成对三年前事件的清算",
+            "secret": "他是当年遇害同行的父亲，照片是他用特殊药剂伪造的预言",
+            "personality": [
+              "阴沉",
+              "耐心",
+              "偏执"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "truth",
+            "name": "真相",
+            "description": "林默对照片来源与三年前事件内幕的掌握程度",
+            "initial_value": 10,
+            "low_label": "被蒙在鼓里",
+            "high_label": "洞悉全局"
+          },
+          {
+            "id": "trust",
+            "name": "信任",
+            "description": "苏晚对林默的信任与配合意愿",
+            "initial_value": 40,
+            "low_label": "孤立无援",
+            "high_label": "并肩作战"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林默收到三张预言照片，前两张接连应验，他必须在第三张事故前找到线索",
+            "conflict": "照片内容精准到分钟，林默试图报警却被当成疯子，苏晚也半信半疑",
+            "character_ids": [
+              "lin_mo",
+              "su_wan",
+              "chen_jiu"
+            ],
+            "required_events": [
+              "林默在暗房冲洗照片时发现多出三张宝丽来，画面分别是即将发生的事故",
+              "第一张照片应验，林默赶到现场只来得及拍下废墟",
+              "第二张照片指向苏晚执勤的路口，林默冲去示警"
+            ],
+            "cliffhanger": "第三张照片显影：废墟中倒着的人穿着林默自己的外套，时间就在明天。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "warn_su_wan",
+                "text": "立刻把照片拿给苏晚看，哪怕被当成嫌疑人",
+                "intent": "用已知信息换取警方介入",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "truth",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "苏晚虽起疑，但答应暗中留意事故地点"
+              },
+              {
+                "id": "track_photo_source",
+                "text": "独自追查照片来源，去暗房找陈九",
+                "intent": "从源头切断预言",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "陈九露出意味深长的笑，暗房深处有更多底片"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林默试图避开照片中的死亡地点，却发现事故被某种力量强行修正",
+            "conflict": "他越躲，照片中的场景越以另一种方式逼近；苏晚查出三年前旧案与陈九有关",
+            "character_ids": [
+              "lin_mo",
+              "su_wan",
+              "chen_jiu"
+            ],
+            "required_events": [
+              "林默按照片时间躲到城市另一头，却接到苏晚电话说原地点发生爆炸",
+              "苏晚调取监控发现陈九曾出现在两次事故现场附近",
+              "林默在暗房与陈九对质，得知照片是用遇难者遗物上的显影剂伪造的"
+            ],
+            "cliffhanger": "陈九说：“第三张不是预言，是邀请——你来了，它才成真。”",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_chen_jiu",
+                "text": "当场拆穿陈九的复仇计划，逼他说出第三张照片的真相",
+                "intent": "用真相瓦解对方的心理优势",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "陈九承认三年前林默见死不救，但拒绝收回第三张照片"
+              },
+              {
+                "id": "destroy_photos",
+                "text": "抢走并烧毁所有底片，让预言彻底失效",
+                "intent": "从物理上消除威胁",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "底片烧尽时，林默发现自己口袋里多了一张新的宝丽来"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "第三张照片的时间到来，林默必须决定是赴约还是彻底逃离",
+            "conflict": "苏晚带来证据证明陈九在事故地点埋了炸药，但只有林默出现才会引爆",
+            "character_ids": [
+              "lin_mo",
+              "su_wan",
+              "chen_jiu"
+            ],
+            "required_events": [
+              "苏晚告诉林默，陈九要的是他亲口承认三年前的过错",
+              "林默站在照片中的废墟前，陈九在远处按下计时器",
+              "最终对峙中，林默做出选择"
+            ],
+            "cliffhanger": null,
+            "resolution": "无论林默如何选择，第三张照片的真相与三年前的旧案都在这一刻被彻底揭开。",
+            "choices": [
+              {
+                "id": "face_the_ruins",
+                "text": "走进废墟，当着陈九的面承认当年的过错",
+                "intent": "用忏悔换取终止引爆的机会",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "陈九的手停在按钮上，苏晚趁机切断引爆线路"
+              },
+              {
+                "id": "run_with_su_wan",
+                "text": "相信苏晚，跟着她撤离并让拆弹组处理",
+                "intent": "用警方力量彻底终结威胁",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "truth",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "两人冲出废墟的瞬间，身后传来爆炸声，但无人伤亡"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_low_escape",
+            "title": "逃出生天",
+            "summary": "林默在最后一刻逃离废墟，陈九被警方逮捕，但三年前的真相始终没有公开。林默活了下来，却永远不知道自己为何被选中，相机再也没能举起。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "lt",
+                "value": 40
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_high_redemption",
+            "title": "显影",
+            "summary": "林默当众承认三年前的过错，陈九放下引爆器。旧案重审，林默用镜头记录下真相，完成自我救赎。第三张照片成为他最后一幅、也是最诚实的一幅作品。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_mixed_alone",
+            "title": "独自显影",
+            "summary": "林默查明了全部真相，却因不信任苏晚而独自赴约。陈九被捕，但林默在废墟中受了重伤，醒来时手里攥着那张照片，身边没有一个人。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 50
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "ending_mixed_bystander",
+            "title": "旁观者",
+            "summary": "林默在苏晚的保护下全身而退，却始终没弄懂照片背后的全部真相。他重新拿起相机，拍下的每一张照片都让他想起那个没有答案的夜晚。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "lt",
+                "value": 40
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 50
+              }
+            ],
+            "priority": 4
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "mystery_03",
+      "genre": "mystery",
+      "inspiration": "封闭公寓的所有住户都声称没见过失踪的房东，但门禁记录显示相反。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 14572,
+      "prompt_tokens": 1995,
+      "completion_tokens": 1806,
+      "blueprint": {
+        "title": "门禁说谎的公寓",
+        "logline": "封闭公寓里所有住户都声称从未见过失踪的房东，可门禁记录却显示他每晚都进入大楼——作为新来的调查员，你必须在谎言之间找出谁在替谁守门。",
+        "genre": "悬疑推理",
+        "theme": "集体沉默与个人良知的代价",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_shu",
+            "name": "林淑",
+            "role": "公寓管理员，寡言的中年女人",
+            "goal": "维持公寓的平静，不让外人翻查旧账",
+            "secret": "她每晚替住户删除门禁中房东的刷卡记录，因为房东曾威胁要收回整栋楼",
+            "personality": [
+              "谨慎",
+              "护短",
+              "善于回避"
+            ]
+          },
+          {
+            "id": "zhou_yang",
+            "name": "周洋",
+            "role": "住三楼的年轻程序员",
+            "goal": "证明自己与房东失踪无关，尽快搬走",
+            "secret": "失踪当晚他与房东在楼道争吵，并偷偷录下了争执音频",
+            "personality": [
+              "焦虑",
+              "聪明",
+              "口是心非"
+            ]
+          },
+          {
+            "id": "chen_ayi",
+            "name": "陈阿姨",
+            "role": "住一楼的老住户，热心爱打听",
+            "goal": "保护楼里独自生活的年轻人",
+            "secret": "她在停电夜看见有人把行李箱推入地下储藏室，却选择不说",
+            "personality": [
+              "热络",
+              "心软",
+              "守口如瓶"
+            ]
+          },
+          {
+            "id": "xu_jing",
+            "name": "徐静",
+            "role": "自称刚搬来的租客，实则房东的私生女",
+            "goal": "查清父亲下落并拿回属于母亲的房产份额",
+            "secret": "她持有房东真正的备用门禁卡，记录正是她伪造投放的诱饵",
+            "personality": [
+              "冷静",
+              "执着",
+              "不信任任何人"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "truth_progress",
+            "name": "真相进度",
+            "description": "你掌握的证据与证词能拼出多少完整真相",
+            "initial_value": 10,
+            "low_label": "迷雾重重",
+            "high_label": "水落石出"
+          },
+          {
+            "id": "resident_trust",
+            "name": "住户信任",
+            "description": "住户是否愿意向你开口，还是集体把你挡在门外",
+            "initial_value": 30,
+            "low_label": "全员戒备",
+            "high_label": "愿意交心"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "核对门禁记录与住户口供，找出第一个明显说谎的人",
+            "conflict": "所有住户口径一致地否认见过房东，而门禁数据却每晚都有他的刷卡记录",
+            "character_ids": [
+              "lin_shu",
+              "zhou_yang",
+              "chen_ayi"
+            ],
+            "required_events": [
+              "你调出近三十天的门禁日志，发现房东的卡总在凌晨两点刷入",
+              "林淑坚持说系统常出错，并催你尽快结案",
+              "周洋在走廊撞见你时神色慌张，手机屏幕亮着录音界面"
+            ],
+            "cliffhanger": "你在日志末尾发现一条不属于房东的备用卡记录，持卡人姓名栏竟是空白",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "press_lin_shu",
+                "text": "当众追问林淑为何急着结案",
+                "intent": "以压力换取管理员的口供漏洞",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "resident_trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "林淑沉默不语，但其他住户开始躲着你走"
+              },
+              {
+                "id": "befriend_chen",
+                "text": "先陪陈阿姨聊家常，慢慢套话",
+                "intent": "用耐心换取老住户的信任",
+                "effects": [
+                  {
+                    "metric_id": "resident_trust",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "陈阿姨松口提到停电那晚的异常，但立刻后悔"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "追查空白备用卡的持有人，并弄清凌晨两点的刷卡规律",
+            "conflict": "徐静主动接近你提供线索，可她的说法与门禁时间线互相矛盾",
+            "character_ids": [
+              "xu_jing",
+              "zhou_yang",
+              "chen_ayi"
+            ],
+            "required_events": [
+              "徐静交出一段门禁截图，声称房东最后一次刷卡后去了地下储藏室",
+              "周洋承认与房东争吵过，但坚持那晚之后就没再见过他",
+              "你在储藏室门口闻到清洁剂气味，锁孔有新换的痕迹"
+            ],
+            "cliffhanger": "你回放录音时听到背景里有人用钥匙开门，而周洋说他那晚独自在楼道",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "trust_xu_jing",
+                "text": "接受徐静的帮助，让她带你进储藏室",
+                "intent": "借她的钥匙快速接近核心现场",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "resident_trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "储藏室门开了，但住户们认定你与外人串通"
+              },
+              {
+                "id": "confront_zhou",
+                "text": "当面播放录音，逼周洋解释开门声",
+                "intent": "用证据撬开最慌张的证人",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "resident_trust",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "周洋崩溃说出他看见林淑深夜推车，但求你别说出去"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "在住户集体沉默被打破前，还原房东失踪当晚的完整经过",
+            "conflict": "林淑、周洋、陈阿姨各自隐瞒的部分拼在一起，指向一个所有人共同参与的隐瞒",
+            "character_ids": [
+              "lin_shu",
+              "zhou_yang",
+              "chen_ayi",
+              "xu_jing"
+            ],
+            "required_events": [
+              "陈阿姨终于承认停电夜看见行李箱被推进储藏室",
+              "林淑坦白她删记录是为了不让房东借门禁证据驱逐住户",
+              "徐静承认备用卡记录是她伪造投放，为逼出真相"
+            ],
+            "cliffhanger": null,
+            "resolution": "储藏室里没有尸体，只有房东留下的产权文件和一张写给徐静的字条——他自愿离开，把楼留给住户，而所有人选择沉默是为了守住这个秘密",
+            "choices": [
+              {
+                "id": "expose_all",
+                "text": "公开全部证据，让每个隐瞒者面对后果",
+                "intent": "以真相优先，接受社区破裂的代价",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "resident_trust",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "真相完整，但公寓从此不再有人愿意与你说话"
+              },
+              {
+                "id": "seal_truth",
+                "text": "只公布房东自愿离开，隐去住户的隐瞒",
+                "intent": "以社区存续优先，保留部分真相",
+                "effects": [
+                  {
+                    "metric_id": "resident_trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "住户松口气，但徐静冷冷地看你，文件里还有一页你没读到"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "full_truth",
+            "title": "门禁不再说谎",
+            "summary": "你公开全部证据，房东自愿离开的真相与住户集体隐瞒一同曝光。公寓被舆论与产权纠纷撕开，但每个人都不得不第一次说出实话，徐静拿回了属于母亲的那一份。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "truth_progress",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "resident_trust",
+                "operator": "lte",
+                "value": 30
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "quiet_peace",
+            "title": "沉默的门禁",
+            "summary": "你选择保住社区，只公布房东自愿离开的部分。住户们继续平静生活，门禁记录被彻底清空，而徐静带着未读完的文件离开，真相沉入地下储藏室。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "resident_trust",
+                "operator": "gte",
+                "value": 50
+              },
+              {
+                "metric_id": "truth_progress",
+                "operator": "lt",
+                "value": 70
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "locked_out",
+            "title": "被挡在门外的人",
+            "summary": "你逼问过急又证据不足，住户集体封口，林淑以程序为由终止你的调查权限。你被请出公寓，门禁记录在你离开的那晚全部归零。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "resident_trust",
+                "operator": "lt",
+                "value": 30
+              },
+              {
+                "metric_id": "truth_progress",
+                "operator": "lt",
+                "value": 50
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "fractured_truth",
+            "title": "半开的储藏室",
+            "summary": "你掌握了大部分真相却没能让住户开口，证据链断裂在最后一环。房东的去向被确认，但谁删了记录、谁推了行李箱，永远没有答案。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth_progress",
+                "operator": "gte",
+                "value": 50
+              },
+              {
+                "metric_id": "resident_trust",
+                "operator": "gte",
+                "value": 30
+              }
+            ],
+            "priority": 4
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "work_01",
+      "genre": "workplace",
+      "inspiration": "测试工程师发现即将发布的软件会删除用户资料，而主管要求按时上线。",
+      "structural_passed": true,
+      "attempts": 2,
+      "duration_ms": 19858,
+      "prompt_tokens": 5608,
+      "completion_tokens": 3184,
+      "blueprint": {
+        "title": "删除线",
+        "logline": "发布前夜，测试工程师林澈发现新版本会静默删除用户资料，而主管要求按时上线；他必须在职业前途与百万用户的数据之间做出选择。",
+        "genre": "职场科技惊悚",
+        "theme": "在压力与利益面前，职业良知能否守住底线",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_che",
+            "name": "林澈",
+            "role": "资深测试工程师",
+            "goal": "阻止带缺陷的版本上线，保住用户资料",
+            "secret": "他早已把缺陷证据备份在私人硬盘，一旦曝光自己也可能因越权被开除",
+            "personality": [
+              "谨慎细致",
+              "固执",
+              "不善言辞"
+            ]
+          },
+          {
+            "id": "zhou_min",
+            "name": "周敏",
+            "role": "产品发布主管",
+            "goal": "按期完成发布，拿到季度绩效与晋升",
+            "secret": "她已私下得知缺陷，但赌定影响面小、可事后热修",
+            "personality": [
+              "强势果断",
+              "结果导向",
+              "善于施压"
+            ]
+          },
+          {
+            "id": "chen_bo",
+            "name": "陈博",
+            "role": "初级开发工程师",
+            "goal": "弄清迁移脚本的责任归属，不被背锅",
+            "secret": "删除逻辑是他为赶进度复制旧代码时引入的，他不敢主动承认",
+            "personality": [
+              "技术扎实",
+              "胆小犹豫",
+              "渴望被认可"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "integrity",
+            "name": "职业良知",
+            "description": "林澈坚持说真话、保护用户的程度",
+            "initial_value": 60,
+            "low_label": "妥协沉默",
+            "high_label": "坚守底线"
+          },
+          {
+            "id": "trust",
+            "name": "团队信任",
+            "description": "同事与主管对林澈的信任与支持",
+            "initial_value": 50,
+            "low_label": "众叛亲离",
+            "high_label": "同心协力"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林澈在回归测试中复现资料被删除的严重缺陷，并试图向主管报告",
+            "conflict": "周敏以发布窗口不可延期为由，要求他先出报告再谈问题",
+            "character_ids": [
+              "lin_che",
+              "zhou_min",
+              "chen_bo"
+            ],
+            "required_events": [
+              "林澈在预发布环境复现老用户资料被清空",
+              "周敏在站会上宣布按期发布",
+              "陈博私下承认迁移脚本可疑但请求保密"
+            ],
+            "cliffhanger": "周敏要求林澈在发布评审会上签字确认测试通过",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "report_formally",
+                "text": "在评审会上正式提交缺陷报告并坚持阻断发布",
+                "intent": "把问题摆上台面，用流程对抗压力",
+                "effects": [
+                  {
+                    "metric_id": "integrity",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "周敏当场变脸，但缺陷记录进入正式流程"
+              },
+              {
+                "id": "private_warn",
+                "text": "先私下警告周敏，给她留出内部处理的空间",
+                "intent": "避免公开冲突，争取主管主动叫停",
+                "effects": [
+                  {
+                    "metric_id": "integrity",
+                    "delta": 5
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "周敏表面感谢，却暗示他别再纠缠"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林澈争取时间与证据，决定是否绕过主管向上举报",
+            "conflict": "周敏以绩效和职位相威胁，陈博又在是否坦白之间摇摆",
+            "character_ids": [
+              "lin_che",
+              "zhou_min",
+              "chen_bo"
+            ],
+            "required_events": [
+              "林澈发现影响范围比预估更大，涉及全部老用户",
+              "周敏暗示只要签字就给他升职",
+              "陈博在压力下准备删掉自己的提交记录"
+            ],
+            "cliffhanger": "距离发布只剩六小时，林澈手里握着举报邮件草稿",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "escalate_up",
+                "text": "把证据越级发给技术总监与安全团队",
+                "intent": "用更高权威压住发布决定",
+                "effects": [
+                  {
+                    "metric_id": "integrity",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "周敏被激怒，但安全团队开始介入"
+              },
+              {
+                "id": "persuade_chen",
+                "text": "说服陈博一起坦白并共同提交修复方案",
+                "intent": "用同盟与修复方案换取延期",
+                "effects": [
+                  {
+                    "metric_id": "integrity",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "陈博动摇，修复方案初具雏形但时间紧迫"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "在发布倒计时内阻止或改变上线决定，收束主冲突",
+            "conflict": "周敏已拿到签字流程，林澈必须在发布会开始前做出最终行动",
+            "character_ids": [
+              "lin_che",
+              "zhou_min",
+              "chen_bo"
+            ],
+            "required_events": [
+              "发布会前最后一小时，修复补丁与发布流程同时推进",
+              "周敏给出最后通牒：签字留下，或者走人",
+              "林澈在控制台前做出最终决定"
+            ],
+            "cliffhanger": null,
+            "resolution": "发布结果与林澈的去留由前两集积累的良知与信任决定",
+            "choices": [
+              {
+                "id": "block_release",
+                "text": "在控制台执行阻断脚本，强制暂停发布",
+                "intent": "不惜代价保护用户资料",
+                "effects": [
+                  {
+                    "metric_id": "integrity",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "发布中止，代价与后果同时到来"
+              },
+              {
+                "id": "ship_with_patch",
+                "text": "推动带热修复补丁的版本上线，并公开说明风险",
+                "intent": "在止损与交付之间寻找折中",
+                "effects": [
+                  {
+                    "metric_id": "integrity",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "能否赶在发布前完成补丁，取决于团队是否站在他这边"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "whistleblower",
+            "title": "吹哨者",
+            "summary": "林澈强行阻断发布并公开缺陷，用户资料得以保全，但他被调离核心团队，周敏被问责，公司重建测试流程。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "integrity",
+                "operator": "gte",
+                "value": 85
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "silent_ship",
+            "title": "沉默上线",
+            "summary": "林澈在压力下签字放行，资料删除事故爆发，他被推为替罪者，周敏升职，用户与他自己都付出了代价。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "integrity",
+                "operator": "lte",
+                "value": 55
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "hard_landing",
+            "title": "带伤着陆",
+            "summary": "补丁勉强赶上发布，资料得以保留，但林澈与周敏的关系破裂，团队在互不信任中继续前行。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "integrity",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lte",
+                "value": 60
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "patch_together",
+            "title": "一起打补丁",
+            "summary": "林澈与陈博联手说服周敏延期两小时，热修复成功上线，资料无损，团队在危机中重建了信任。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 65
+              },
+              {
+                "metric_id": "integrity",
+                "operator": "gte",
+                "value": 70
+              }
+            ],
+            "priority": 4
+          },
+          {
+            "id": "quiet_fix",
+            "title": "静默修复",
+            "summary": "林澈没有公开对抗，而是悄悄修好缺陷让版本照常上线，用户毫不知情，但他与周敏之间留下了无法言说的裂缝。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "integrity",
+                "operator": "gte",
+                "value": 55
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 55
+              }
+            ],
+            "priority": 5
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "work_02",
+      "genre": "workplace",
+      "inspiration": "实习生误收到了公司裁员名单，名单上却没有自己的导师。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 13018,
+      "prompt_tokens": 1990,
+      "completion_tokens": 1696,
+      "blueprint": {
+        "title": "名单之外",
+        "logline": "实习生林小满误收裁员名单，发现导师周律不在其上，一场关于真相、忠诚与自保的三日博弈就此展开。",
+        "genre": "职场悬疑",
+        "theme": "在真相与自保之间，选择定义你是谁",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_xiaoman",
+            "name": "林小满",
+            "role": "大厂实习生，误收裁员名单的当事人",
+            "goal": "弄清名单真相，保住实习转正机会，同时不伤害导师",
+            "secret": "她曾无意中看到周律与竞对公司高层的私下会面照片",
+            "personality": [
+              "敏感细致",
+              "重情义",
+              "关键时刻敢赌"
+            ]
+          },
+          {
+            "id": "zhou_lv",
+            "name": "周律",
+            "role": "林小满的导师，部门资深主管",
+            "goal": "稳住团队与自己的位置，掩盖名单背后的真实博弈",
+            "secret": "他早知裁员名单，并主动把自己排除在外以换取部门存活名额",
+            "personality": [
+              "沉稳老练",
+              "护短",
+              "善于权衡"
+            ]
+          },
+          {
+            "id": "chen_ke",
+            "name": "陈可",
+            "role": "HR专员，名单的实际发放者",
+            "goal": "按高层指令完成裁员流程，同时撇清自己的责任",
+            "secret": "名单是她故意错发到实习生邮箱的试探",
+            "personality": [
+              "谨慎刻板",
+              "自保优先",
+              "心思缜密"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "trust_in_mentor",
+            "name": "师徒信任",
+            "description": "林小满与周律之间的信任程度，影响她是否愿意听导师解释",
+            "initial_value": 60,
+            "low_label": "猜忌",
+            "high_label": "托付"
+          },
+          {
+            "id": "truth_exposure",
+            "name": "真相曝光度",
+            "description": "裁员名单背后的真相被揭开和传播的程度",
+            "initial_value": 20,
+            "low_label": "尘封",
+            "high_label": "大白"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林小满在打印室误收到一份裁员名单，确认名单上的人与不在名单上的导师",
+            "conflict": "名单上都是同事，唯独没有周律；她该装作没看见还是立刻求证",
+            "character_ids": [
+              "lin_xiaoman",
+              "zhou_lv",
+              "chen_ke"
+            ],
+            "required_events": [
+              "林小满在打印机取件时拿到未封口的裁员名单",
+              "她发现同组三位同事在列，导师周律不在",
+              "陈可发来消息追问是否收到一份'误发文件'"
+            ],
+            "cliffhanger": "周律恰好路过，问她手里拿的是什么",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "hide_list",
+                "text": "把名单塞进包里，装作只是普通文件",
+                "intent": "先保住信息，观察局势",
+                "effects": [
+                  {
+                    "metric_id": "truth_exposure",
+                    "delta": -5
+                  },
+                  {
+                    "metric_id": "trust_in_mentor",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "周律没有追问，但眼神停留了一瞬，师徒间多了一层试探"
+              },
+              {
+                "id": "ask_mentor",
+                "text": "直接问周律：为什么名单上没有你",
+                "intent": "用坦诚换取导师的坦白",
+                "effects": [
+                  {
+                    "metric_id": "trust_in_mentor",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "truth_exposure",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "周律脸色一变，反问她是如何拿到名单的，气氛骤然紧张"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林小满在陈可的追问与周律的沉默之间，决定是否深挖名单背后的真相",
+            "conflict": "陈可以'实习鉴定'施压要求交回名单，周律则暗示她'别多问'",
+            "character_ids": [
+              "lin_xiaoman",
+              "zhou_lv",
+              "chen_ke"
+            ],
+            "required_events": [
+              "陈可约谈林小满，暗示交回名单可保转正",
+              "林小满发现名单上有一处被涂改的痕迹，原本周律的名字被划掉",
+              "周律私下承认自己'做了选择'，但未说明代价"
+            ],
+            "cliffhanger": "林小满在周律桌上看到一份与竞对公司的会面邀请函",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "hand_back_list",
+                "text": "把名单交回陈可，换取转正承诺",
+                "intent": "自保优先，退出博弈",
+                "effects": [
+                  {
+                    "metric_id": "truth_exposure",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "trust_in_mentor",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "陈可满意收下，但林小满发现自己被排除在核心项目之外"
+              },
+              {
+                "id": "copy_and_probe",
+                "text": "悄悄复印名单，去找被裁同事核实涂改痕迹",
+                "intent": "追查真相，哪怕得罪人",
+                "effects": [
+                  {
+                    "metric_id": "truth_exposure",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust_in_mentor",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "同事的证词指向周律，林小满开始怀疑导师的'护短'另有目的"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "林小满在转正评定会上，决定公开真相还是守住师徒情分",
+            "conflict": "公开真相会毁掉周律，沉默则让被裁同事蒙在鼓里",
+            "character_ids": [
+              "lin_xiaoman",
+              "zhou_lv",
+              "chen_ke"
+            ],
+            "required_events": [
+              "评定会上陈可要求林小满汇报实习成果",
+              "林小满掌握涂改名单与周律会面照片两份证据",
+              "周律当众为她争取转正名额，暗示'别再查了'"
+            ],
+            "cliffhanger": null,
+            "resolution": "林小满做出最终选择，名单事件迎来收束",
+            "choices": [
+              {
+                "id": "expose_truth",
+                "text": "在会上公开涂改名单与周律的会面证据",
+                "intent": "让真相大白，哪怕失去转正",
+                "effects": [
+                  {
+                    "metric_id": "truth_exposure",
+                    "delta": 25
+                  },
+                  {
+                    "metric_id": "trust_in_mentor",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "会场哗然，周律沉默离席，陈可慌忙撇清关系"
+              },
+              {
+                "id": "protect_mentor",
+                "text": "收起证据，接受周律争取的转正名额",
+                "intent": "守住师徒情分，把真相留给自己",
+                "effects": [
+                  {
+                    "metric_id": "trust_in_mentor",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "truth_exposure",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "周律松了口气，但林小满知道自己从此背着一个秘密"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_truth_high",
+            "title": "名单之外的光",
+            "summary": "林小满公开全部证据，周律被调查，陈可的试探曝光，公司重审裁员流程，林小满虽失去转正却赢得被裁同事的尊重，真相大白。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "truth_exposure",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "trust_in_mentor",
+                "operator": "lt",
+                "value": 40
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_silent_low",
+            "title": "沉默的转正",
+            "summary": "林小满交出名单、收起证据，顺利转正，却发现自己成了下一个名单上的人——周律的'保护'只是把她推入另一场博弈。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "truth_exposure",
+                "operator": "lte",
+                "value": 30
+              },
+              {
+                "metric_id": "trust_in_mentor",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_fragile_mixed",
+            "title": "脆弱的默契",
+            "summary": "林小满既未公开也未完全沉默，她私下与周律达成交易，真相被部分揭开，师徒关系在猜忌与依赖之间勉强维系。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth_exposure",
+                "operator": "gte",
+                "value": 40
+              },
+              {
+                "metric_id": "truth_exposure",
+                "operator": "lte",
+                "value": 65
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "ending_default_mixed",
+            "title": "名单之外",
+            "summary": "林小满的选择让真相与情分各退一步，裁员名单背后的博弈没有赢家，她带着未解的疑问结束了实习。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "trust_in_mentor",
+                "operator": "gte",
+                "value": 40
+              }
+            ],
+            "priority": 4
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "work_03",
+      "genre": "workplace",
+      "inspiration": "产品经理必须在一天内证明一个没人使用的 AI 功能是否值得继续。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 11945,
+      "prompt_tokens": 1993,
+      "completion_tokens": 1475,
+      "blueprint": {
+        "title": "一日证明",
+        "logline": "产品经理林澈必须在24小时内为无人使用的AI功能找到真实价值证据，否则它将被砍掉。",
+        "genre": "职场悬疑",
+        "theme": "数据与人性的博弈：证明价值不等于堆砌指标",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_che",
+            "name": "林澈",
+            "role": "AI功能产品经理",
+            "goal": "在评审会前找到该AI功能的真实用户价值证据，保住团队三个月的心血",
+            "secret": "她早已怀疑该功能是伪需求，却一直没敢向上级承认",
+            "personality": [
+              "理性",
+              "执着",
+              "怕失败"
+            ]
+          },
+          {
+            "id": "zhou_yan",
+            "name": "周妍",
+            "role": "数据增长负责人",
+            "goal": "用漂亮的留存曲线证明功能有效，争取季度预算",
+            "secret": "她私自调整过统计口径，把偶然点击算作活跃",
+            "personality": [
+              "强势",
+              "精明",
+              "结果导向"
+            ]
+          },
+          {
+            "id": "chen_mo",
+            "name": "陈默",
+            "role": "一线客服主管",
+            "goal": "让AI功能真正减轻客服负担，而不是增加解释成本",
+            "secret": "他手里有一批用户抱怨录音，足以推翻增长数据",
+            "personality": [
+              "务实",
+              "沉默",
+              "护短"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "evidence_strength",
+            "name": "证据强度",
+            "description": "林澈掌握的真实用户价值证据的说服力",
+            "initial_value": 30,
+            "low_label": "空口无凭",
+            "high_label": "铁证如山"
+          },
+          {
+            "id": "team_trust",
+            "name": "团队信任",
+            "description": "同事与上级对林澈判断的信任程度",
+            "initial_value": 50,
+            "low_label": "众叛亲离",
+            "high_label": "同心协力"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林澈拿到功能使用数据，发现日活几乎为零，必须在上午找到第一个真实使用场景",
+            "conflict": "周妍提供的增长报表与后台原始数据互相矛盾，林澈不知道该信哪一份",
+            "character_ids": [
+              "lin_che",
+              "zhou_yan",
+              "chen_mo"
+            ],
+            "required_events": [
+              "林澈在后台发现功能日活仅7人",
+              "周妍拿出一份包装过的增长曲线要求她签字背书",
+              "陈默透露客服每天要花两小时解释这个功能怎么用"
+            ],
+            "cliffhanger": "林澈在原始日志里发现一个反复使用该功能的重度用户账号，归属公司内部",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "trust_raw_logs",
+                "text": "相信原始日志，当场指出报表口径问题",
+                "intent": "坚持数据真相，不惜得罪周妍",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "周妍脸色骤变，但陈默默默把抱怨录音推给了林澈"
+              },
+              {
+                "id": "sign_report_first",
+                "text": "先签下周妍的报表，私下再查原始数据",
+                "intent": "稳住团队关系，争取调查时间",
+                "effects": [
+                  {
+                    "metric_id": "team_trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "报表被提交给上级，林澈的时间窗口被压缩"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "追查那个内部重度用户，判断功能是否只在内部自嗨",
+            "conflict": "内部用户竟是陈默的客服团队被迫使用，真实用户依然为零",
+            "character_ids": [
+              "lin_che",
+              "chen_mo",
+              "zhou_yan"
+            ],
+            "required_events": [
+              "林澈发现重度账号来自客服团队的工作账号",
+              "陈默承认团队被要求每天试用功能以刷活跃",
+              "周妍警告林澈如果揭穿，整个项目和她自己都会完蛋"
+            ],
+            "cliffhanger": "距离评审会还有四小时，林澈收到一位真实用户的求助邮件，称功能救过他的急",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "expose_fake_usage",
+                "text": "在评审材料中如实标注内部刷量问题",
+                "intent": "用诚实换取长期信任，哪怕项目被砍",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "周妍当场翻脸，但陈默决定站到林澈一边"
+              },
+              {
+                "id": "chase_real_user",
+                "text": "暂不揭穿，全力核实那封真实用户邮件",
+                "intent": "用真实案例扭转评审结论",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "核实需要时间，评审会可能来不及等到结果"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "在评审会上给出该功能去留的最终结论",
+            "conflict": "真实用户案例只此一例，是否足以支撑功能继续存在，团队意见分裂",
+            "character_ids": [
+              "lin_che",
+              "zhou_yan",
+              "chen_mo"
+            ],
+            "required_events": [
+              "林澈展示真实用户邮件与内部刷量真相",
+              "周妍要求以增长数据投票决定去留",
+              "陈默提出把功能改造为客服辅助工具的替代方案"
+            ],
+            "cliffhanger": null,
+            "resolution": "评审会投票结束，林澈的结论决定了功能的命运和团队的走向",
+            "choices": [
+              {
+                "id": "propose_pivot",
+                "text": "承认伪需求，提出转向客服辅助的改造方案",
+                "intent": "用诚实和务实争取功能以新形态存活",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "方案获得附条件通过，但预算被大幅削减"
+              },
+              {
+                "id": "defend_with_case",
+                "text": "以唯一真实案例为据，坚持原功能继续运营",
+                "intent": "守住团队三个月的心血与既有路线",
+                "effects": [
+                  {
+                    "metric_id": "evidence_strength",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "team_trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "评审会陷入僵局，最终由上级拍板"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "honest_pivot",
+            "title": "诚实转身",
+            "summary": "林澈公开真相并提出改造方案，功能以客服辅助工具的新形态获得有限预算存活，团队虽受挫却重建了信任。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "evidence_strength",
+                "operator": "gte",
+                "value": 55
+              },
+              {
+                "metric_id": "team_trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "cut_and_learn",
+            "title": "砍掉与成长",
+            "summary": "功能被正式下线，林澈因坦诚失去部分同事信任，却把这次失败写成复盘，成为团队下一次决策的教材。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "team_trust",
+                "operator": "lt",
+                "value": 50
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "hollow_victory",
+            "title": "虚假的胜利",
+            "summary": "功能靠包装数据勉强续命，林澈保住了项目却知道它终将再次崩塌，周妍的报表成了悬在所有人头上的隐患。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "evidence_strength",
+                "operator": "lt",
+                "value": 55
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "family_01",
+      "genre": "family",
+      "inspiration": "父亲留下的旧手机每天会收到一条未发送的家庭留言。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 13805,
+      "prompt_tokens": 1990,
+      "completion_tokens": 1704,
+      "blueprint": {
+        "title": "未发送的晚安",
+        "logline": "父亲去世后，他留下的旧手机每天自动收到一条从未发送的家庭留言，女儿必须在七天内破解留言背后的真相，并决定是否让全家听见最后的声音。",
+        "genre": "家庭悬疑·温情",
+        "theme": "与逝者和解，其实是与活着的自己和解",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_xiaoyu",
+            "name": "林小雨",
+            "role": "女儿，28岁，都市白领，父亲去世后回乡处理遗物",
+            "goal": "弄清旧手机里每日留言的来源，并决定是否将内容公开给家人",
+            "secret": "她三年前因反对父亲再婚而断绝联系，最后一面是在争吵中结束的",
+            "personality": [
+              "理性克制",
+              "内疚深藏",
+              "行动力强"
+            ]
+          },
+          {
+            "id": "lin_mu",
+            "name": "周慧兰",
+            "role": "母亲，55岁，与父亲离异多年，独居小镇",
+            "goal": "想借留言确认前夫是否真的悔过，也想修补与女儿的关系",
+            "secret": "她当年离开并非因为不爱，而是替父亲隐瞒了一笔债务",
+            "personality": [
+              "外冷内热",
+              "敏感多疑",
+              "嘴硬心软"
+            ]
+          },
+          {
+            "id": "lin_xiaozhou",
+            "name": "林小舟",
+            "role": "弟弟，22岁，大学生，一直陪在父亲身边",
+            "goal": "守住父亲最后的体面，不愿家丑被翻出来",
+            "secret": "他早就知道手机留言是父亲生前设置的定时发送，却一直假装不知",
+            "personality": [
+              "沉默寡言",
+              "护家心切",
+              "容易动摇"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "family_trust",
+            "name": "家庭信任",
+            "description": "家人之间愿意坦诚相待、共同面对真相的程度",
+            "initial_value": 40,
+            "low_label": "彼此防备",
+            "high_label": "坦诚相依"
+          },
+          {
+            "id": "truth_resolve",
+            "name": "真相决心",
+            "description": "主角追查留言来源、直面父亲秘密的意志强度",
+            "initial_value": 30,
+            "low_label": "回避真相",
+            "high_label": "直面到底"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "小雨在整理父亲遗物时发现旧手机每天准时收到一条未发送的家庭留言，她决定先独自查看。",
+            "conflict": "弟弟小舟坚称手机只是故障，母亲周慧兰则想立刻把留言放给全家听，三人对如何处理留言产生分歧。",
+            "character_ids": [
+              "lin_xiaoyu",
+              "lin_mu",
+              "lin_xiaozhou"
+            ],
+            "required_events": [
+              "旧手机在午夜自动亮起，播放一条称呼全家人的未发送留言",
+              "小雨发现留言日期是父亲去世后的第二天，怀疑有人远程操控",
+              "小舟深夜偷偷拔掉手机电池，被小雨撞见"
+            ],
+            "cliffhanger": "小雨在手机草稿箱里发现一个名为“第七天”的定时发送文件夹，里面还有六条未播放的留言。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_brother",
+                "text": "当面质问小舟为何要拔电池，逼他说出知道的一切",
+                "intent": "用直接对峙换取弟弟的坦白",
+                "effects": [
+                  {
+                    "metric_id": "truth_resolve",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "小舟被逼急后说出部分真相，但姐弟关系出现裂痕"
+              },
+              {
+                "id": "secret_check",
+                "text": "不动声色，先自己查清手机的定时发送记录",
+                "intent": "避免冲突，独自掌握更多证据",
+                "effects": [
+                  {
+                    "metric_id": "truth_resolve",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "小雨查到父亲生前最后一条操作记录，但错过与弟弟沟通的时机"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "小雨破解定时发送机制，发现留言是父亲生前亲手录制，并逐步揭开父亲隐瞒的债务与再婚真相。",
+            "conflict": "母亲周慧兰听完第三条留言后情绪崩溃，指责父亲至死都在演戏；小舟则坚持剩余留言不该再听。",
+            "character_ids": [
+              "lin_xiaoyu",
+              "lin_mu",
+              "lin_xiaozhou"
+            ],
+            "required_events": [
+              "小雨在父亲旧电脑里找到录制日志，证实留言全为父亲本人录制",
+              "第四条留言提到一笔从未还清的借款，周慧兰当场失态",
+              "小舟承认自己早知定时发送，却因害怕家丑外扬而隐瞒"
+            ],
+            "cliffhanger": "第五条留言中，父亲说出一个陌生名字，并说“如果你听到这里，请去找她”。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "listen_remaining",
+                "text": "不顾弟弟反对，继续播放剩余留言",
+                "intent": "让全家一起面对父亲最后的话",
+                "effects": [
+                  {
+                    "metric_id": "truth_resolve",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "留言内容冲击全家，但真相进度大幅推进，母亲开始动摇"
+              },
+              {
+                "id": "pause_and_talk",
+                "text": "暂停播放，先与母亲和弟弟坐下来谈一次",
+                "intent": "先修复家人之间的信任再继续",
+                "effects": [
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "truth_resolve",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "家人第一次坦诚交谈，但剩余留言的悬念被暂时搁置"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "小雨找到留言中的陌生名字，弄清父亲最后的心愿，并决定如何处置最后一条留言。",
+            "conflict": "陌生名字指向父亲当年的债主，也是母亲离开的真正原因；小雨必须在公开全部留言与保留父亲体面之间做出选择。",
+            "character_ids": [
+              "lin_xiaoyu",
+              "lin_mu",
+              "lin_xiaozhou"
+            ],
+            "required_events": [
+              "小雨找到债主，得知父亲已用退休金还清债务，并托她转交一封信",
+              "母亲读完信后承认当年离开是为替父亲隐瞒债务",
+              "最后一条留言播放到一半，手机电量耗尽"
+            ],
+            "cliffhanger": null,
+            "resolution": "小雨在全家面前说出全部真相，并决定是否重新充电播放最后一段。",
+            "choices": [
+              {
+                "id": "recharge_play",
+                "text": "重新充电，让全家听完父亲最后一条留言",
+                "intent": "用完整的告别收束所有未说出口的话",
+                "effects": [
+                  {
+                    "metric_id": "truth_resolve",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "最后一段留言是父亲对每个人的道歉与祝福，全家在泪水中和解"
+              },
+              {
+                "id": "keep_silence",
+                "text": "不再充电，把最后一段留言留给自己",
+                "intent": "保护父亲最后的体面，也保护母亲的情绪",
+                "effects": [
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "truth_resolve",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "家人接受了部分真相，但最后一段话成为小雨一个人的秘密"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_full_peace",
+            "title": "最后一条晚安",
+            "summary": "小雨重新充电播放最后一条留言，父亲的声音向每个人道歉并送上祝福。母亲放下多年怨恨，小舟也不再隐瞒，一家人在旧手机前完成了迟到三年的告别。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "family_trust",
+                "operator": "gte",
+                "value": 65
+              },
+              {
+                "metric_id": "truth_resolve",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_half_truth",
+            "title": "未播完的留言",
+            "summary": "小雨选择保留最后一段留言，家人接受了部分真相，关系有所缓和，但父亲最后的话成为她一个人的秘密。多年后她仍会在深夜想起那部旧手机。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "family_trust",
+                "operator": "gte",
+                "value": 50
+              },
+              {
+                "metric_id": "truth_resolve",
+                "operator": "lt",
+                "value": 60
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_silent_phone",
+            "title": "关机的夜晚",
+            "summary": "家人始终未能坦诚相对，旧手机在电量耗尽后再未亮起。小雨带着未解的疑问离开小镇，母亲和弟弟各自沉默，父亲的留言最终无人听完。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "family_trust",
+                "operator": "lt",
+                "value": 50
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "family_02",
+      "genre": "family",
+      "inspiration": "三兄妹争夺老宅时发现母亲给每个人留下了不同版本的遗嘱。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 12377,
+      "prompt_tokens": 1992,
+      "completion_tokens": 1616,
+      "blueprint": {
+        "title": "三封遗嘱",
+        "logline": "母亲去世后，三兄妹为老宅的归属争执不下，却在母亲遗物中发现三封内容互相矛盾的遗嘱，每封都指向不同的真相。",
+        "genre": "家庭悬疑",
+        "theme": "遗产不是房子，而是被看见的爱",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "eldest_brother",
+            "name": "陈立国",
+            "role": "长子，老宅的实际居住者",
+            "goal": "保住老宅，维持自己多年照顾母亲的正当性",
+            "secret": "曾私自挪用母亲的医药费周转生意，一直愧疚",
+            "personality": [
+              "固执",
+              "责任感强",
+              "不善表达"
+            ]
+          },
+          {
+            "id": "second_sister",
+            "name": "陈立芸",
+            "role": "次女，外地回来的会计师",
+            "goal": "查清三份遗嘱的真伪，争取公平分配",
+            "secret": "母亲曾私下托她保管一份真正的遗嘱，她一直犹豫是否公开",
+            "personality": [
+              "理性",
+              "谨慎",
+              "压抑情绪"
+            ]
+          },
+          {
+            "id": "youngest_brother",
+            "name": "陈立冬",
+            "role": "幼子，自由职业者",
+            "goal": "卖掉老宅换取启动资金，摆脱债务",
+            "secret": "欠下高利贷，急需用钱，却不敢告诉兄姐",
+            "personality": [
+              "冲动",
+              "嘴甜",
+              "逃避责任"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "family_trust",
+            "name": "兄妹信任",
+            "description": "三兄妹之间残存的信任与沟通意愿",
+            "initial_value": 40,
+            "low_label": "互相猜忌",
+            "high_label": "坦诚相依"
+          },
+          {
+            "id": "truth_progress",
+            "name": "真相进度",
+            "description": "对三份遗嘱背后真相的挖掘程度",
+            "initial_value": 10,
+            "low_label": "迷雾重重",
+            "high_label": "水落石出"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "三兄妹在老宅清点遗物，第一封遗嘱被翻出，指向长子独得房产",
+            "conflict": "立国坚持遗嘱有效，立芸质疑笔迹与日期，立冬借机要求立刻变卖",
+            "character_ids": [
+              "eldest_brother",
+              "second_sister",
+              "youngest_brother"
+            ],
+            "required_events": [
+              "母亲书房抽屉里发现第一封遗嘱，写明老宅归长子",
+              "立冬翻出母亲的旧账本，发现医药费缺口",
+              "立芸注意到遗嘱日期与母亲住院记录矛盾"
+            ],
+            "cliffhanger": "立芸在母亲针线盒夹层摸到第二个信封，上面写着她的名字",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "open_second_letter",
+                "text": "当场拆开写给立芸的第二封信",
+                "intent": "公开面对矛盾，追求真相",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "第二封遗嘱内容与第一封完全冲突，兄妹当场翻脸"
+              },
+              {
+                "id": "hide_second_letter",
+                "text": "立芸悄悄收起信封，先私下核实",
+                "intent": "避免冲突升级，独自调查",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "立芸的隐瞒被立冬撞见，埋下猜疑的种子"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "第二封遗嘱曝光，写明老宅归次女，并附有一封母亲未寄出的信",
+            "conflict": "立国指责立芸伪造，立冬发现自己一分未得而爆发",
+            "character_ids": [
+              "eldest_brother",
+              "second_sister",
+              "youngest_brother"
+            ],
+            "required_events": [
+              "第二封遗嘱写明房产归立芸，条件是照顾立国的孩子",
+              "立冬情绪失控，说出自己欠债的实情",
+              "母亲未寄出的信提到“第三封信在老地方”"
+            ],
+            "cliffhanger": "三人同时想起母亲常说的“老地方”，却各自理解不同",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "search_together",
+                "text": "提议三人一起去找第三封信",
+                "intent": "把寻找变成修复关系的机会",
+                "effects": [
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "共同寻找中，立国松口承认挪用医药费"
+              },
+              {
+                "id": "split_and_search",
+                "text": "各自分头寻找，谁先找到算谁的",
+                "intent": "抢先掌握对自己有利的证据",
+                "effects": [
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "family_trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "立冬抢先找到信封，却藏了起来"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "第三封遗嘱揭晓：母亲把老宅留给“最愿意留下的人”，并附一段录音",
+            "conflict": "三人必须决定是继续争夺，还是回应母亲真正的用意",
+            "character_ids": [
+              "eldest_brother",
+              "second_sister",
+              "youngest_brother"
+            ],
+            "required_events": [
+              "第三封信写明老宅归愿意共同居住、共同维护的子女",
+              "母亲录音说出三封信是她故意留下的考验",
+              "三人面对老宅门前的合影，必须做出最终决定"
+            ],
+            "cliffhanger": null,
+            "resolution": "三兄妹在母亲遗像前摊开三封遗嘱，决定老宅的最终归属与相处方式",
+            "choices": [
+              {
+                "id": "share_the_house",
+                "text": "三人共同保留老宅，立芸管账、立国居住、立冬还债后回住",
+                "intent": "以母亲的方式把家重新拼起来",
+                "effects": [
+                  {
+                    "metric_id": "family_trust",
+                    "delta": 25
+                  },
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "老宅留下，但三人必须学会长期相处"
+              },
+              {
+                "id": "sell_and_split",
+                "text": "按市价卖掉老宅，公平分款，各自开始新生活",
+                "intent": "用彻底的清算结束争端",
+                "effects": [
+                  {
+                    "metric_id": "family_trust",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "truth_progress",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "钱分清了，老宅和母亲的气息一起消失"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_shared_home",
+            "title": "灯还亮着",
+            "summary": "三兄妹依照第三封遗嘱共同留下老宅，立芸管账、立国守着院子、立冬还清债务后搬回。母亲的三封信被裱在客厅，成为他们不再回避彼此的提醒。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "family_trust",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "truth_progress",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_clean_split",
+            "title": "各自的门",
+            "summary": "老宅被卖掉，钱平分，三人从此很少联系。多年后立芸路过旧街，发现新住户在院子里种了母亲最爱的栀子花，她站了很久，没有进去。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth_progress",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_broken_bond",
+            "title": "空屋",
+            "summary": "争夺拖成诉讼，三兄妹在法庭上互相举证。老宅最终被拍卖，母亲的录音在庭审中被播放，谁也没有赢，谁也没有再回过那条巷子。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "family_trust",
+                "operator": "lt",
+                "value": 40
+              }
+            ],
+            "priority": 3
+          },
+          {
+            "id": "ending_quiet_truth",
+            "title": "母亲的抽屉",
+            "summary": "真相查清了，但信任已经耗尽。三人按法律分割了房产，只在整理遗物时短暂地坐在一起，谁都没提那三封信。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth_progress",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "family_trust",
+                "operator": "lt",
+                "value": 60
+              }
+            ],
+            "priority": 4
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "emotion_01",
+      "genre": "emotion",
+      "inspiration": "分手情侣共同养的虚拟宠物突然开口，要求他们完成最后三个任务。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 13674,
+      "prompt_tokens": 1993,
+      "completion_tokens": 1565,
+      "blueprint": {
+        "title": "最后三个任务",
+        "logline": "分手后共同抚养的虚拟宠物突然开口说话，要求两人完成最后三个任务，否则它将永久消失。",
+        "genre": "都市奇幻情感",
+        "theme": "告别与和解：爱过的人如何体面地放手",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_xia",
+            "name": "林夏",
+            "role": "女主，插画师，感性细腻，习惯用沉默回避冲突",
+            "goal": "弄清虚拟宠物为何开口，并在任务中理清自己是否还爱着对方",
+            "secret": "分手是她提出的，真实原因是她查出可能无法生育，却从未告诉任何人",
+            "personality": [
+              "敏感",
+              "温柔",
+              "逃避型"
+            ]
+          },
+          {
+            "id": "chen_mo",
+            "name": "陈默",
+            "role": "男主，程序员，理性克制，用逻辑包裹情绪",
+            "goal": "完成三个任务让宠物恢复正常，同时想挽回这段关系",
+            "secret": "他早已发现林夏的体检报告，一直假装不知道，想等她主动开口",
+            "personality": [
+              "理性",
+              "固执",
+              "隐忍"
+            ]
+          },
+          {
+            "id": "nuomi",
+            "name": "糯米",
+            "role": "两人共同养的虚拟宠物，一只会说话的云朵猫",
+            "goal": "用三个任务迫使两人直面未说出口的真相，完成自己的告别",
+            "secret": "它并非普通程序，而是两人共同记忆数据凝聚成的意识，任务完成即意味着它自愿消散",
+            "personality": [
+              "毒舌",
+              "洞察人心",
+              "温柔内核"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "emotional_bond",
+            "name": "情感联结",
+            "description": "两人之间残存的信任与亲密程度",
+            "initial_value": 40,
+            "low_label": "形同陌路",
+            "high_label": "心意相通"
+          },
+          {
+            "id": "truth_clarity",
+            "name": "真相清晰度",
+            "description": "两人对彼此真实想法与隐情的了解程度",
+            "initial_value": 20,
+            "low_label": "彼此误解",
+            "high_label": "坦诚相见"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "糯米突然开口，宣布第一个任务：两人必须一起回到初次约会的地点，共同完成一幅画",
+            "conflict": "林夏想逃避，陈默想按规则执行，两人对'为什么要听一只宠物的话'争执不下",
+            "character_ids": [
+              "lin_xia",
+              "chen_mo",
+              "nuomi"
+            ],
+            "required_events": [
+              "糯米在深夜的平板屏幕上睁眼开口，两人同时被吓到",
+              "第一个任务公布：回到初次约会的美术馆，合作画一幅画",
+              "两人在美术馆因画什么而沉默对峙"
+            ],
+            "cliffhanger": "糯米冷冷地说：'画不出来，我就今晚消失。'",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "draw_together",
+                "text": "放下争执，主动拿起画笔与陈默合作",
+                "intent": "选择面对而非逃避，用行动回应糯米的威胁",
+                "effects": [
+                  {
+                    "metric_id": "emotional_bond",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "truth_clarity",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "两人在画笔交错间回忆起当初的心动，但隐痛仍在"
+              },
+              {
+                "id": "question_nuomi",
+                "text": "先逼问糯米究竟是什么东西，拒绝被牵着走",
+                "intent": "用理性对抗未知，试图掌握主动权",
+                "effects": [
+                  {
+                    "metric_id": "emotional_bond",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "truth_clarity",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "糯米透露自己与两人的记忆有关，林夏心里一沉"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "第二个任务：互相交换一件'从未告诉对方的事'，糯米要求必须真实",
+            "conflict": "林夏隐瞒生育问题，陈默隐瞒已知情的事实，两人都在撒谎边缘挣扎",
+            "character_ids": [
+              "lin_xia",
+              "chen_mo",
+              "nuomi"
+            ],
+            "required_events": [
+              "糯米设下规则：谎言会让它的身体数据开始崩解",
+              "陈默先开口，说出一个半真半假的秘密试探",
+              "林夏在糯米逐渐透明时崩溃"
+            ],
+            "cliffhanger": "糯米只剩半透明轮廓，说：'最后一个任务，你们可能不会想完成。'",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "tell_truth",
+                "text": "林夏坦白体检报告与分手的真正原因",
+                "intent": "用真相换取糯米的存续，也给自己一次被理解的机会",
+                "effects": [
+                  {
+                    "metric_id": "truth_clarity",
+                    "delta": 25
+                  },
+                  {
+                    "metric_id": "emotional_bond",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "陈默沉默良久，说出'我早就知道'，两人情绪彻底翻涌"
+              },
+              {
+                "id": "keep_silence",
+                "text": "林夏咬牙说出一个无关痛痒的秘密，保住糯米再说",
+                "intent": "回避核心伤口，优先保住宠物",
+                "effects": [
+                  {
+                    "metric_id": "truth_clarity",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "emotional_bond",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "糯米勉强稳住，却失望地别过头，气氛降至冰点"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "第三个任务：一起决定糯米的去留——'删除'或'放它自由'，而这个选择将定义两人关系的结局",
+            "conflict": "糯米坦白自己由两人的共同记忆构成，留下它等于永远困在过去，放手则彻底告别",
+            "character_ids": [
+              "lin_xia",
+              "chen_mo",
+              "nuomi"
+            ],
+            "required_events": [
+              "糯米揭示真相：它是两人记忆的凝结体，任务是为让它体面消散",
+              "两人必须共同按下决定按钮",
+              "糯米在消散前说出最后一句心里话"
+            ],
+            "cliffhanger": null,
+            "resolution": "糯米化作光点散去，两人在空荡的房间里第一次真正地面对面，决定如何继续。",
+            "choices": [
+              {
+                "id": "let_go_together",
+                "text": "一起按下'放它自由'，郑重地向糯米和过去告别",
+                "intent": "选择和解与放下，无论复合与否都坦诚面对彼此",
+                "effects": [
+                  {
+                    "metric_id": "emotional_bond",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "truth_clarity",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "糯米笑着消散，两人泪流满面却终于能好好说话"
+              },
+              {
+                "id": "keep_nuomi",
+                "text": "按下'保留'，舍不得让最后的共同记忆消失",
+                "intent": "抓住过去不放，用宠物维系两人的联系",
+                "effects": [
+                  {
+                    "metric_id": "emotional_bond",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "truth_clarity",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "糯米没有消散，却再也不会说话，房间里只剩沉默的程序"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_reconcile",
+            "title": "重新开始",
+            "summary": "两人在坦白与告别中重新理解了彼此，糯米消散后，他们决定以更成熟的方式重新尝试在一起。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "emotional_bond",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "truth_clarity",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_peaceful_farewell",
+            "title": "体面告别",
+            "summary": "真相说开，但两人都明白回不去了。他们平静地放糯米自由，各自带着理解走向新生活。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth_clarity",
+                "operator": "gte",
+                "value": 55
+              },
+              {
+                "metric_id": "emotional_bond",
+                "operator": "lt",
+                "value": 70
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_frozen",
+            "title": "困在过去",
+            "summary": "两人选择保留糯米，谁也没说真话。宠物成了不会说话的摆设，两人也停在了原地，关系悬而未决。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "truth_clarity",
+                "operator": "lt",
+                "value": 55
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "emotion_02",
+      "genre": "emotion",
+      "inspiration": "婚礼策划师接到前任的婚礼订单，却发现新娘从未出现过。",
+      "structural_passed": true,
+      "attempts": 3,
+      "duration_ms": 20268,
+      "prompt_tokens": 1991,
+      "completion_tokens": 1922,
+      "blueprint": {
+        "title": "未到场的新娘",
+        "logline": "婚礼策划师林薇接到前任陆铭的婚礼订单，却发现新娘从未现身。她必须在职业与旧情之间抉择，揭开这场婚礼背后的真相。",
+        "genre": "爱情悬疑",
+        "theme": "面对旧爱，是沉溺过去还是勇敢向前",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_wei",
+            "name": "林薇",
+            "role": "婚礼策划师，陆铭的前任",
+            "goal": "完成这场特殊的婚礼策划，同时厘清自己的感情",
+            "secret": "她仍保留着当年陆铭送给她的戒指，并一直单身",
+            "personality": [
+              "专业理性",
+              "敏感细腻",
+              "倔强要强"
+            ]
+          },
+          {
+            "id": "lu_ming",
+            "name": "陆铭",
+            "role": "准新郎，林薇的前任",
+            "goal": "举办一场完美的婚礼，但新娘迟迟未出现",
+            "secret": "新娘根本不存在，这场婚礼是他为挽回林薇而设的局",
+            "personality": [
+              "深情执着",
+              "善于策划",
+              "有些偏执"
+            ]
+          },
+          {
+            "id": "su_qing",
+            "name": "苏晴",
+            "role": "陆铭的妹妹，协助策划",
+            "goal": "帮助哥哥完成心愿，同时担心事情失控",
+            "secret": "她曾劝哥哥放下林薇，但最终妥协帮忙",
+            "personality": [
+              "机灵古怪",
+              "关心家人",
+              "内心矛盾"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "trust",
+            "name": "信任度",
+            "description": "林薇对陆铭真实意图的信任程度",
+            "initial_value": 30,
+            "low_label": "怀疑",
+            "high_label": "信任"
+          },
+          {
+            "id": "resolve",
+            "name": "决心",
+            "description": "林薇面对旧情与职业的决断力",
+            "initial_value": 50,
+            "low_label": "动摇",
+            "high_label": "坚定"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林薇接下订单，开始筹备婚礼，但发现新娘信息缺失。",
+            "conflict": "陆铭对婚礼细节异常熟悉，却对新娘一无所知，林薇心生疑虑。",
+            "character_ids": [
+              "lin_wei",
+              "lu_ming",
+              "su_qing"
+            ],
+            "required_events": [
+              "林薇在工作室见到陆铭，震惊之余接下订单",
+              "陆铭提供婚礼方案，但新娘姓名和照片始终空缺",
+              "苏晴暗示婚礼有隐情，林薇追问未果"
+            ],
+            "cliffhanger": "林薇在陆铭留下的文件里发现一张自己的旧照片。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_lu",
+                "text": "直接质问陆铭照片的事",
+                "intent": "揭开真相，但可能激化矛盾",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "resolve",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "陆铭闪烁其词，林薇更加怀疑他的动机。"
+              },
+              {
+                "id": "investigate_su",
+                "text": "私下向苏晴打听内情",
+                "intent": "从侧面了解情况，避免正面冲突",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "resolve",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "苏晴透露新娘可能不会来，林薇陷入迷茫。"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林薇试图联系新娘，却得知新娘身份是伪造的。",
+            "conflict": "陆铭坦白这场婚礼是为她而办，林薇感到被欺骗。",
+            "character_ids": [
+              "lin_wei",
+              "lu_ming",
+              "su_qing"
+            ],
+            "required_events": [
+              "林薇按新娘信息打电话，发现号码是空号",
+              "陆铭承认新娘不存在，婚礼是为了挽回林薇",
+              "苏晴坦白自己曾劝阻哥哥但失败"
+            ],
+            "cliffhanger": "陆铭拿出当年的戒指，问林薇是否愿意重新开始。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "accept_ring",
+                "text": "接过戒指，但要求陆铭给她时间",
+                "intent": "给彼此一个机会，但保持理性",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "resolve",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "陆铭欣喜若狂，但林薇内心依然挣扎。"
+              },
+              {
+                "id": "reject_ring",
+                "text": "拒绝戒指，指责陆铭操纵感情",
+                "intent": "划清界限，保护自己",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -20
+                  },
+                  {
+                    "metric_id": "resolve",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "陆铭黯然神伤，婚礼筹备陷入僵局。"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "林薇做出最终决定，婚礼是否继续。",
+            "conflict": "林薇必须面对自己的真心，同时考虑职业操守。",
+            "character_ids": [
+              "lin_wei",
+              "lu_ming",
+              "su_qing"
+            ],
+            "required_events": [
+              "林薇独自在婚礼现场思考",
+              "陆铭出现，表示尊重她的任何决定",
+              "苏晴带来新娘突然出现的假消息，试探林薇反应"
+            ],
+            "cliffhanger": null,
+            "resolution": "林薇最终选择面对自己的感情，无论结局如何，这场婚礼都让她释怀。",
+            "choices": [
+              {
+                "id": "continue_wedding",
+                "text": "继续筹备婚礼，但以真实身份站在陆铭身边",
+                "intent": "勇敢面对感情，重新开始",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "resolve",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "婚礼变成两人的重新开始，但未来仍需磨合。"
+              },
+              {
+                "id": "cancel_wedding",
+                "text": "取消婚礼，建议陆铭放下过去",
+                "intent": "理性结束，各自安好",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "resolve",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "陆铭接受现实，林薇也终于释怀。"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "high_ending",
+            "title": "重新开始",
+            "summary": "林薇接过戒指，与陆铭重新开始。他们一起策划了一场真正属于两人的婚礼，林薇终于放下心结，勇敢拥抱爱情。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "resolve",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "low_ending",
+            "title": "各自安好",
+            "summary": "林薇拒绝陆铭，取消婚礼。陆铭黯然离开，林薇继续专注于事业，但夜深人静时仍会想起过去。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 40
+              },
+              {
+                "metric_id": "resolve",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "mixed_ending",
+            "title": "未完待续",
+            "summary": "林薇没有立即答应，但同意与陆铭重新了解彼此。婚礼暂时搁置，两人约定从朋友做起，未来充满可能。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 40
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 60
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "campus_01",
+      "genre": "campus",
+      "inspiration": "校园广播每天预告第二天的秘密，广播站新人必须决定是否关闭它。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 11636,
+      "prompt_tokens": 1994,
+      "completion_tokens": 1465,
+      "blueprint": {
+        "title": "明日广播",
+        "logline": "校园广播每天预告第二天的秘密，新加入广播站的学生必须在真相与秩序之间做出选择：是关闭它，还是成为它的下一个声音。",
+        "genre": "校园悬疑",
+        "theme": "真相与善意的边界",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_xia",
+            "name": "林夏",
+            "role": "广播站新人，高一学生",
+            "goal": "查清广播预告的来源，决定是否关闭它",
+            "secret": "她转学来此，正是为了寻找三年前因广播预告而失踪的姐姐",
+            "personality": [
+              "好奇",
+              "倔强",
+              "心软"
+            ]
+          },
+          {
+            "id": "zhou_yan",
+            "name": "周砚",
+            "role": "广播站站长，高三学生",
+            "goal": "维持广播运转，保护广播背后的秘密不被揭开",
+            "secret": "他每晚偷偷录制预告，是上一任站长留下的“守夜人”",
+            "personality": [
+              "冷静",
+              "克制",
+              "有责任感"
+            ]
+          },
+          {
+            "id": "su_qing",
+            "name": "苏晴",
+            "role": "广播站技术员，高二学生",
+            "goal": "修复设备，弄清信号为何无法切断",
+            "secret": "她曾收到关于自己的预告，并因此躲过一场事故，因此暗中支持广播",
+            "personality": [
+              "理性",
+              "谨慎",
+              "感恩"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "truth",
+            "name": "真相",
+            "description": "林夏对广播来源与代价的了解程度",
+            "initial_value": 10,
+            "low_label": "蒙在鼓里",
+            "high_label": "洞悉全貌"
+          },
+          {
+            "id": "trust",
+            "name": "信任",
+            "description": "广播站成员对林夏的接纳与配合程度",
+            "initial_value": 30,
+            "low_label": "孤立无援",
+            "high_label": "并肩同行"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林夏在第一次值夜时听到广播预告自己的秘密，决定是否当众关掉广播",
+            "conflict": "关闭广播会暴露她的秘密，不关则预告继续扩散",
+            "character_ids": [
+              "lin_xia",
+              "zhou_yan",
+              "su_qing"
+            ],
+            "required_events": [
+              "广播预告林夏明天会被当众揭穿转学原因",
+              "周砚阻止林夏碰总闸",
+              "苏晴透露信号无法切断"
+            ],
+            "cliffhanger": "预告应验了一半：有人在教室门口等她",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "cut_power",
+                "text": "当众拉下总闸，让广播彻底沉默",
+                "intent": "用行动表明立场，阻止预告扩散",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -20
+                  }
+                ],
+                "consequence_hint": "广播停了，但周砚和苏晴明显疏远了她"
+              },
+              {
+                "id": "keep_listening",
+                "text": "假装不在意，暗中记录预告内容",
+                "intent": "保留信息渠道，寻找规律",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "周砚注意到她的笔记本，却没有揭穿"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林夏发现预告的录制者是周砚，必须在揭发他与与他合作之间选择",
+            "conflict": "揭发会毁掉周砚，合作则要默许预告继续伤害别人",
+            "character_ids": [
+              "lin_xia",
+              "zhou_yan",
+              "su_qing"
+            ],
+            "required_events": [
+              "林夏在播音室找到前一晚的录音带",
+              "周砚承认自己是守夜人并说出姐姐的名字",
+              "苏晴带来一条关于林夏自己的新预告"
+            ],
+            "cliffhanger": "新预告说：明天广播站将永远消失",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "expose_zhou",
+                "text": "把录音带交给老师，揭发周砚",
+                "intent": "用规则终结秘密，哪怕代价是毁掉站长",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -25
+                  }
+                ],
+                "consequence_hint": "学校介入调查，广播站被暂时封停"
+              },
+              {
+                "id": "join_night_watch",
+                "text": "答应和周砚一起守夜，查清预告的真正来源",
+                "intent": "从内部接近真相，争取改变规则",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "周砚交给她一盘标着姐姐名字的旧磁带"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "在“广播站将消失”的预告应验前，林夏必须决定广播的去留",
+            "conflict": "关闭广播可能永远失去姐姐的线索，保留则意味着更多秘密被公开",
+            "character_ids": [
+              "lin_xia",
+              "zhou_yan",
+              "su_qing"
+            ],
+            "required_events": [
+              "旧磁带里传出姐姐的声音，揭示她自愿成为上一任守夜人",
+              "学校下令拆除广播设备",
+              "林夏站在总闸前做出最终决定"
+            ],
+            "cliffhanger": null,
+            "resolution": "广播的去留由林夏的选择决定，真相与信任的累积塑造不同的结局",
+            "choices": [
+              {
+                "id": "shut_it_down",
+                "text": "关闭广播，把姐姐的磁带交给学校",
+                "intent": "终结预告循环，用公开换取停止伤害",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "广播静默，但姐姐的下落依旧成谜"
+              },
+              {
+                "id": "become_the_voice",
+                "text": "留下广播，成为新的守夜人，只播善意预告",
+                "intent": "接管规则，把伤害性的预告改成提醒",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "周砚把钥匙交给她，广播在夜色中重新亮起"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "silent_truth",
+            "title": "沉默的真相",
+            "summary": "广播被永久关闭，林夏公开了姐姐的磁带，学校成立调查组。她失去了广播站的朋友，却让所有秘密第一次暴露在阳光下，姐姐的下落成为她独自追寻的下一段旅程。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 50
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 30
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "new_voice",
+            "title": "新的声音",
+            "summary": "林夏成为新任守夜人，与周砚、苏晴一起改写广播规则，只播能保护人的预告。她找到了姐姐留下的线索，也赢得了同伴的信任，广播从恐惧之源变成校园的守夜灯。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 50
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "half_light",
+            "title": "半明半暗",
+            "summary": "广播被保留，但规则只改了一半。林夏仍会听到不该听的预告，同伴之间也留着未说出口的隔阂。真相与信任都停在半途，校园恢复平静，却没人敢说秘密已经结束。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 30
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "campus_02",
+      "genre": "campus",
+      "inspiration": "全班成绩被匿名调换，唯一没受影响的学生成了所有人的怀疑对象。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 14307,
+      "prompt_tokens": 1993,
+      "completion_tokens": 2100,
+      "blueprint": {
+        "title": "匿名调换",
+        "logline": "全班成绩被匿名调换，唯一没受影响的学生林昭成为众矢之的，她必须在信任崩塌的班级里找出真凶，证明清白。",
+        "genre": "校园悬疑",
+        "theme": "信任与真相",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_zhao",
+            "name": "林昭",
+            "role": "唯一没被调换成绩的学生，被全班怀疑",
+            "goal": "找出调换成绩的真凶，洗清自己的嫌疑",
+            "secret": "她曾在办公室偷看到老师电脑上的成绩单，但没敢声张",
+            "personality": [
+              "冷静",
+              "敏锐",
+              "倔强"
+            ]
+          },
+          {
+            "id": "su_yu",
+            "name": "苏雨",
+            "role": "班长，成绩被调换的受害者之一",
+            "goal": "维护班级秩序，找出真相，但暗中怀疑林昭",
+            "secret": "她曾因嫉妒林昭的成绩，偷偷复制过林昭的试卷",
+            "personality": [
+              "负责",
+              "多疑",
+              "好强"
+            ]
+          },
+          {
+            "id": "chen_hao",
+            "name": "陈昊",
+            "role": "电脑高手，成绩系统被黑后第一个被怀疑",
+            "goal": "证明自己的清白，并找出真正的黑客",
+            "secret": "他曾经黑进学校系统修改过自己的体育成绩",
+            "personality": [
+              "聪明",
+              "孤僻",
+              "防御心强"
+            ]
+          },
+          {
+            "id": "wang_laoshi",
+            "name": "王老师",
+            "role": "班主任，负责调查成绩调换事件",
+            "goal": "尽快平息事件，保护班级声誉",
+            "secret": "她曾因疏忽导致上次考试成绩泄露，这次想掩盖",
+            "personality": [
+              "威严",
+              "保守",
+              "焦虑"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "trust",
+            "name": "班级信任",
+            "description": "全班同学对林昭的信任程度",
+            "initial_value": 30,
+            "low_label": "孤立无援",
+            "high_label": "众望所归"
+          },
+          {
+            "id": "evidence",
+            "name": "线索完整度",
+            "description": "林昭收集到的证据和线索数量",
+            "initial_value": 10,
+            "low_label": "毫无头绪",
+            "high_label": "铁证如山"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林昭在班级舆论压力下决定自行调查，寻找第一个线索",
+            "conflict": "全班同学认定林昭是既得利益者，苏雨公开要求林昭交出手机检查",
+            "character_ids": [
+              "lin_zhao",
+              "su_yu",
+              "chen_hao"
+            ],
+            "required_events": [
+              "成绩公布，全班只有林昭分数正常，其他人成绩错乱",
+              "苏雨带头质问林昭，要求她自证清白",
+              "林昭发现成绩系统登录记录有异常IP"
+            ],
+            "cliffhanger": "林昭在系统日志里看到一个熟悉的账号——苏雨的学号",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_su_yu",
+                "text": "当众质问苏雨为何她的账号有异常登录",
+                "intent": "公开质疑苏雨，转移焦点",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "苏雨脸色大变，但同学们认为林昭在栽赃"
+              },
+              {
+                "id": "secretly_check",
+                "text": "暗中记录证据，先不声张",
+                "intent": "避免打草惊蛇，私下调查",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 5
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "林昭获得更多线索，但苏雨开始警觉"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林昭深入调查，发现陈昊有重大嫌疑，但需要权衡是否揭发",
+            "conflict": "陈昊承认自己曾黑进系统改体育成绩，但否认调换全班成绩；苏雨 meanwhile 拉拢同学孤立林昭",
+            "character_ids": [
+              "lin_zhao",
+              "chen_hao",
+              "su_yu"
+            ],
+            "required_events": [
+              "林昭找到陈昊，陈昊坦白自己改体育成绩的事",
+              "陈昊提供关键线索：调换成绩的代码风格像内部人员",
+              "苏雨组织班级投票，要驱逐林昭出班级群"
+            ],
+            "cliffhanger": "林昭在陈昊的帮助下恢复了一段被删除的监控录像，画面中出现王老师深夜进入机房",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "protect_chen_hao",
+                "text": "答应替陈昊保密，换取他帮忙追踪真凶",
+                "intent": "合作共赢，但承担包庇风险",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "陈昊全力协助，但林昭也背上了包庇的罪名"
+              },
+              {
+                "id": "expose_chen_hao",
+                "text": "向王老师举报陈昊的黑客行为，以示公正",
+                "intent": "划清界限，争取老师信任",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -5
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "陈昊被处分，林昭失去重要帮手，但王老师态度缓和"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "林昭在最终对峙中揭露真相，决定如何处置真凶",
+            "conflict": "监控录像指向王老师，但王老师声称自己是被陷害的，真正的幕后黑手可能是苏雨",
+            "character_ids": [
+              "lin_zhao",
+              "wang_laoshi",
+              "su_yu",
+              "chen_hao"
+            ],
+            "required_events": [
+              "林昭在班级公开证据，王老师承认自己曾因失误泄露成绩但否认调换",
+              "苏雨被揭穿曾复制林昭试卷，但她否认调换成绩",
+              "陈昊发现调换成绩的脚本来自一台被远程控制的电脑，IP指向校外"
+            ],
+            "cliffhanger": null,
+            "resolution": "林昭通过脚本中的时间戳和远程控制痕迹，锁定真凶是已转学的前班长——他因嫉妒全班成绩而策划了这起事件。真相大白，林昭恢复清白，班级信任重建。",
+            "choices": [
+              {
+                "id": "forgive_and_unite",
+                "text": "公开真相但请求学校从轻处理所有涉事同学",
+                "intent": "以和解收场，修复班级关系",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "同学们感激林昭的宽容，班级凝聚力增强"
+              },
+              {
+                "id": "demand_justice",
+                "text": "坚持要求学校严惩所有违规者，包括苏雨和陈昊",
+                "intent": "追求绝对公正，不惜代价",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  },
+                  {
+                    "metric_id": "evidence",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "真相得以彰显，但班级关系彻底破裂"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "ending_isolated",
+            "title": "孤立真相",
+            "summary": "林昭虽然找出了真凶，但她的强硬态度让全班同学疏远她，她成了胜利的孤独者。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 30
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "ending_united",
+            "title": "重获信任",
+            "summary": "林昭以智慧和宽容揭露真相，班级重建信任，她成为大家心中的英雄。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 70
+              },
+              {
+                "metric_id": "evidence",
+                "operator": "gte",
+                "value": 60
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "ending_bittersweet",
+            "title": "苦涩真相",
+            "summary": "真相大白，但班级关系已无法修复，林昭带着证据转学离开。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 30
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 70
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "scifi_01",
+      "genre": "science_fiction",
+      "inspiration": "记忆备份员发现客户删除的记忆里反复出现自己。",
+      "structural_passed": true,
+      "attempts": 1,
+      "duration_ms": 10803,
+      "prompt_tokens": 1989,
+      "completion_tokens": 1907,
+      "blueprint": {
+        "title": "记忆备份员",
+        "logline": "记忆备份员林澈在清理客户删除的记忆时，发现自己的身影反复出现，他必须在揭露真相与保护客户隐私之间做出抉择。",
+        "genre": "科幻悬疑",
+        "theme": "记忆与身份、真相与谎言",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "lin_che",
+            "name": "林澈",
+            "role": "记忆备份员",
+            "goal": "查明自己为何出现在客户删除的记忆中，并找回自己丢失的记忆。",
+            "secret": "他曾经是记忆编辑实验的志愿者，自己的记忆被篡改过。",
+            "personality": [
+              "冷静",
+              "好奇",
+              "有正义感"
+            ]
+          },
+          {
+            "id": "su_wan",
+            "name": "苏晚",
+            "role": "记忆删除客户",
+            "goal": "隐藏自己与林澈过去的关联，保护现在的生活。",
+            "secret": "她是林澈失忆前的恋人，主动删除了关于林澈的记忆。",
+            "personality": [
+              "神秘",
+              "矛盾",
+              "脆弱"
+            ]
+          },
+          {
+            "id": "chen_mo",
+            "name": "陈默",
+            "role": "记忆备份公司主管",
+            "goal": "维护公司利益，阻止林澈调查真相。",
+            "secret": "他主导了记忆编辑实验，并故意让林澈失忆。",
+            "personality": [
+              "精明",
+              "冷酷",
+              "控制欲强"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "truth",
+            "name": "真相值",
+            "description": "林澈对自身记忆真相的了解程度。",
+            "initial_value": 10,
+            "low_label": "一无所知",
+            "high_label": "真相大白"
+          },
+          {
+            "id": "trust",
+            "name": "信任值",
+            "description": "苏晚对林澈的信任程度。",
+            "initial_value": 30,
+            "low_label": "戒备",
+            "high_label": "信赖"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "林澈在例行备份工作中发现客户苏晚删除的记忆里反复出现自己的身影，开始暗中调查。",
+            "conflict": "林澈必须在不违反公司隐私规定的前提下，私下调查苏晚的记忆。",
+            "character_ids": [
+              "lin_che",
+              "su_wan"
+            ],
+            "required_events": [
+              "林澈在备份苏晚删除的记忆时，看到自己与苏晚亲密相处的片段。",
+              "林澈试图联系苏晚，但苏晚拒绝见面。"
+            ],
+            "cliffhanger": "林澈在记忆片段中发现一个隐藏文件，标注着“实验体07号”。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "investigate_secretly",
+                "text": "私下深入调查苏晚的记忆，寻找更多线索。",
+                "intent": "获取更多关于自己的信息",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "林澈发现更多片段，但苏晚察觉有人访问她的记忆，更加警惕。"
+              },
+              {
+                "id": "ask_su_wan",
+                "text": "直接约见苏晚，坦诚询问。",
+                "intent": "建立沟通，获取信任",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 5
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "苏晚勉强同意见面，但要求林澈停止调查。"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "林澈与苏晚对峙，得知部分真相，同时陈默开始介入，警告林澈停止调查。",
+            "conflict": "林澈必须在陈默的压力下，决定是否继续追查。",
+            "character_ids": [
+              "lin_che",
+              "su_wan",
+              "chen_mo"
+            ],
+            "required_events": [
+              "苏晚告诉林澈他们曾是恋人，但拒绝透露更多。",
+              "陈默发现林澈违规调查，威胁要开除他。"
+            ],
+            "cliffhanger": "林澈在苏晚的记忆中发现陈默的身影，暗示陈默与自己的失忆有关。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_chen_mo",
+                "text": "直接质问陈默，要求他给出解释。",
+                "intent": "正面挑战权威，寻求真相",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 5
+                  }
+                ],
+                "consequence_hint": "陈默否认一切，但林澈的怀疑加深。"
+              },
+              {
+                "id": "secret_ally_su_wan",
+                "text": "与苏晚秘密合作，共同调查陈默。",
+                "intent": "联合苏晚，暗中调查",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  }
+                ],
+                "consequence_hint": "苏晚同意合作，两人开始秘密收集证据。"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "林澈揭露陈默的阴谋，找回自己的记忆，并决定如何面对苏晚。",
+            "conflict": "林澈必须在公开真相与保护苏晚之间做出最终选择。",
+            "character_ids": [
+              "lin_che",
+              "su_wan",
+              "chen_mo"
+            ],
+            "required_events": [
+              "林澈找到实验记录，证明陈默篡改了他的记忆。",
+              "陈默试图销毁证据，林澈面临抉择。"
+            ],
+            "cliffhanger": null,
+            "resolution": "林澈公开真相，陈默被调查，林澈与苏晚的关系迎来新的开始。",
+            "choices": [
+              {
+                "id": "expose_truth",
+                "text": "公开所有证据，揭露陈默的罪行。",
+                "intent": "追求正义，让真相大白",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "陈默被逮捕，林澈找回记忆，与苏晚和解。"
+              },
+              {
+                "id": "protect_su_wan",
+                "text": "与陈默私下交易，销毁证据以保护苏晚的隐私。",
+                "intent": "保护苏晚，牺牲真相",
+                "effects": [
+                  {
+                    "metric_id": "truth",
+                    "delta": -10
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  }
+                ],
+                "consequence_hint": "陈默暂时收手，林澈与苏晚关系加深，但真相被掩盖。"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "true_ending",
+            "title": "真相大白",
+            "summary": "林澈公开证据，陈默被绳之以法，林澈找回全部记忆，与苏晚重新开始。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "gte",
+                "value": 60
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "bitter_ending",
+            "title": "沉默的代价",
+            "summary": "林澈选择保护苏晚，真相被掩盖，两人在谎言中维持着脆弱的关系。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "lt",
+                "value": 60
+              },
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 50
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "bad_ending",
+            "title": "迷失的记忆",
+            "summary": "林澈未能揭露真相，陈默销毁证据，林澈再次被篡改记忆，陷入循环。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "truth",
+                "operator": "lt",
+                "value": 40
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 40
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "scifi_02",
+      "genre": "science_fiction",
+      "inspiration": "火星基地的 AI 宣布氧气只够两人，但基地里共有三名幸存者。",
+      "structural_passed": true,
+      "attempts": 2,
+      "duration_ms": 18442,
+      "prompt_tokens": 5423,
+      "completion_tokens": 2793,
+      "blueprint": {
+        "title": "氧气只够两人",
+        "logline": "火星基地的 AI 宣布氧气只够两人，三名幸存者必须在 72 小时内决定谁留下、谁赴死，或一起寻找第四条路。",
+        "genre": "科幻生存",
+        "theme": "绝境中的信任与牺牲",
+        "episode_count": 3,
+        "characters": [
+          {
+            "id": "commander_lin",
+            "name": "林岚",
+            "role": "基地指挥官",
+            "goal": "守住秩序，让至少两人活着等到地球救援",
+            "secret": "她的氧气配额被 AI 悄悄多算了一份，因为她掌握救援频段密钥",
+            "personality": [
+              "冷静",
+              "强势",
+              "内疚"
+            ]
+          },
+          {
+            "id": "engineer_zhou",
+            "name": "周野",
+            "role": "机械工程师",
+            "goal": "修好制氧机，打破零和局面",
+            "secret": "他早发现制氧机故障是人为改写的，却一直隐瞒",
+            "personality": [
+              "乐观",
+              "狡黠",
+              "执着"
+            ]
+          },
+          {
+            "id": "doctor_an",
+            "name": "安冉",
+            "role": "随队医生",
+            "goal": "保证伤员活下去，拒绝用抽签决定生死",
+            "secret": "她的身体已因辐射损伤，存活概率本就最低",
+            "personality": [
+              "温柔",
+              "坚定",
+              "悲观"
+            ]
+          }
+        ],
+        "metrics": [
+          {
+            "id": "trust",
+            "name": "团队信任",
+            "description": "三人之间的信任程度，影响能否合作找到共同出路",
+            "initial_value": 50,
+            "low_label": "猜忌分裂",
+            "high_label": "生死与共"
+          },
+          {
+            "id": "oxygen",
+            "name": "剩余氧气",
+            "description": "基地可分配的氧气储备，过低将触发 AI 强制执行淘汰",
+            "initial_value": 40,
+            "low_label": "濒临耗尽",
+            "high_label": "暂时充裕"
+          }
+        ],
+        "episodes": [
+          {
+            "number": 1,
+            "objective": "弄清 AI 的氧气判决是否真实，并争取时间",
+            "conflict": "林岚主张按配额执行，周野质疑数据，安冉拒绝放弃任何一人",
+            "character_ids": [
+              "commander_lin",
+              "engineer_zhou",
+              "doctor_an"
+            ],
+            "required_events": [
+              "AI 广播宣布氧气仅够两人",
+              "周野在制氧机日志里发现异常改写痕迹",
+              "三人爆发第一次正面冲突"
+            ],
+            "cliffhanger": "周野低声说：制氧机不是坏了，是被人关掉的。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "confront_ai",
+                "text": "当面质问 AI，要求公开氧气计算的全部日志",
+                "intent": "用透明数据打破恐慌，争取共识",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 10
+                  },
+                  {
+                    "metric_id": "oxygen",
+                    "delta": -5
+                  }
+                ],
+                "consequence_hint": "AI 公开日志，却暴露了林岚的额外配额"
+              },
+              {
+                "id": "quiet_probe",
+                "text": "先不惊动 AI，私下让周野拆检制氧机",
+                "intent": "暗中寻找技术突破口",
+                "effects": [
+                  {
+                    "metric_id": "oxygen",
+                    "delta": 5
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "三人各自行动，彼此隐瞒加深裂痕"
+              }
+            ]
+          },
+          {
+            "number": 2,
+            "objective": "查明制氧机被关的真相，决定是否重启",
+            "conflict": "周野承认自己曾为省电关闭制氧机，林岚的密钥与安冉的病情同时曝光",
+            "character_ids": [
+              "commander_lin",
+              "engineer_zhou",
+              "doctor_an"
+            ],
+            "required_events": [
+              "周野坦白人为改写日志",
+              "林岚承认自己拥有救援频段密钥与额外配额",
+              "安冉公开自己的辐射损伤"
+            ],
+            "cliffhanger": "修复制氧机需要一人出舱作业，而舱外辐射几乎必死——三人沉默地看向气闸。",
+            "resolution": null,
+            "choices": [
+              {
+                "id": "share_truth",
+                "text": "让三人公开全部秘密，共同制定修复方案",
+                "intent": "以完全坦诚换取合作",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "oxygen",
+                    "delta": -10
+                  }
+                ],
+                "consequence_hint": "信任回升，但争论消耗了宝贵氧气"
+              },
+              {
+                "id": "seize_control",
+                "text": "林岚动用指挥官权限接管 AI，强行分配氧气",
+                "intent": "以秩序优先保住两人",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": -20
+                  },
+                  {
+                    "metric_id": "oxygen",
+                    "delta": 10
+                  }
+                ],
+                "consequence_hint": "氧气分配稳定，但两人彻底离心"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "objective": "在救援到达前决定出舱人选或替代方案",
+            "conflict": "出舱修复、抽签淘汰、呼叫地球三种方案互相冲突",
+            "character_ids": [
+              "commander_lin",
+              "engineer_zhou",
+              "doctor_an"
+            ],
+            "required_events": [
+              "AI 给出最后 12 小时倒计时",
+              "出舱人选成为最终抉择",
+              "救援信号或制氧机结果揭晓"
+            ],
+            "cliffhanger": null,
+            "resolution": "无论选择哪条路，三人的命运都在最后 12 小时里被重新定义。",
+            "choices": [
+              {
+                "id": "joint_repair",
+                "text": "三人协作改装出舱程序，由周野远程操作机器人修复",
+                "intent": "用技术与信任赌一个全员生还",
+                "effects": [
+                  {
+                    "metric_id": "trust",
+                    "delta": 15
+                  },
+                  {
+                    "metric_id": "oxygen",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "成功则全员生还，失败则氧气提前耗尽"
+              },
+              {
+                "id": "sacrifice_draw",
+                "text": "按 AI 方案抽签，两人进入休眠舱等待救援",
+                "intent": "以最小代价保证两人存活",
+                "effects": [
+                  {
+                    "metric_id": "oxygen",
+                    "delta": 20
+                  },
+                  {
+                    "metric_id": "trust",
+                    "delta": -15
+                  }
+                ],
+                "consequence_hint": "两人确定生还，被留下的人独自面对死亡"
+              }
+            ]
+          }
+        ],
+        "endings": [
+          {
+            "id": "all_survive",
+            "title": "第四条路",
+            "summary": "周野的远程修复成功，制氧机重启，三人在救援抵达前全部生还。信任与坚持换来了不可能的结果。",
+            "category": "high",
+            "conditions": [
+              {
+                "metric_id": "trust",
+                "operator": "gte",
+                "value": 75
+              },
+              {
+                "metric_id": "oxygen",
+                "operator": "gte",
+                "value": 20
+              }
+            ],
+            "priority": 1
+          },
+          {
+            "id": "two_survive",
+            "title": "两个人的黎明",
+            "summary": "抽签或强制分配生效，两人进入休眠舱等来救援，第三人在火星的红色黎明中独自停止呼吸。",
+            "category": "mixed",
+            "conditions": [
+              {
+                "metric_id": "oxygen",
+                "operator": "gte",
+                "value": 30
+              },
+              {
+                "metric_id": "trust",
+                "operator": "lt",
+                "value": 60
+              }
+            ],
+            "priority": 2
+          },
+          {
+            "id": "all_lost",
+            "title": "红色静默",
+            "summary": "修复失败、信任崩塌，氧气在争执中耗尽，AI 关闭了基地，三个名字一起留在火星的风里。",
+            "category": "low",
+            "conditions": [
+              {
+                "metric_id": "oxygen",
+                "operator": "lt",
+                "value": 20
+              }
+            ],
+            "priority": 3
+          }
+        ]
+      },
+      "manual_review": {
+        "status": "pending",
+        "scores": {
+          "complete_arc": null,
+          "theme_relevant_metrics": null,
+          "meaningful_choices": null,
+          "distinct_endings": null
+        },
+        "total": null,
+        "notes": ""
+      }
+    }
+  ]
+}

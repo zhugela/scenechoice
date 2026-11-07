@@ -1,0 +1,1 @@
+"""SceneChoice automated tests."""

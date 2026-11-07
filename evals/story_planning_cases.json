@@ -1,0 +1,22 @@
+[
+  {"id":"live_01","genre":"livestream","inspiration":"新人游戏主播误开全队麦，吐槽被恶意剪辑后必须找出幕后推手。"},
+  {"id":"live_02","genre":"livestream","inspiration":"带货主播发现样品与商品不符，在合同和观众信任之间选择。"},
+  {"id":"live_03","genre":"livestream","inspiration":"过气主播收到神秘榜一大哥的挑战，每次兑现承诺都会失去一位朋友。"},
+  {"id":"game_01","genre":"gaming","inspiration":"电竞替补在决赛前发现首发使用作弊脚本，却只有一段不完整录像。"},
+  {"id":"game_02","genre":"gaming","inspiration":"游戏公会会长醒来发现仓库被清空，而嫌疑人都是陪他多年的队友。"},
+  {"id":"game_03","genre":"gaming","inspiration":"落魄玩家在旧街机里打出的每个选择都会改变现实中的小镇。"},
+  {"id":"mystery_01","genre":"mystery","inspiration":"深夜便利店每天多出一张不存在商品的小票，店员决定追查顾客身份。"},
+  {"id":"mystery_02","genre":"mystery","inspiration":"摄影师收到三张未来事故照片，第三张里的人正是自己。"},
+  {"id":"mystery_03","genre":"mystery","inspiration":"封闭公寓的所有住户都声称没见过失踪的房东，但门禁记录显示相反。"},
+  {"id":"work_01","genre":"workplace","inspiration":"测试工程师发现即将发布的软件会删除用户资料，而主管要求按时上线。"},
+  {"id":"work_02","genre":"workplace","inspiration":"实习生误收到了公司裁员名单，名单上却没有自己的导师。"},
+  {"id":"work_03","genre":"workplace","inspiration":"产品经理必须在一天内证明一个没人使用的 AI 功能是否值得继续。"},
+  {"id":"family_01","genre":"family","inspiration":"父亲留下的旧手机每天会收到一条未发送的家庭留言。"},
+  {"id":"family_02","genre":"family","inspiration":"三兄妹争夺老宅时发现母亲给每个人留下了不同版本的遗嘱。"},
+  {"id":"emotion_01","genre":"emotion","inspiration":"分手情侣共同养的虚拟宠物突然开口，要求他们完成最后三个任务。"},
+  {"id":"emotion_02","genre":"emotion","inspiration":"婚礼策划师接到前任的婚礼订单，却发现新娘从未出现过。"},
+  {"id":"campus_01","genre":"campus","inspiration":"校园广播每天预告第二天的秘密，广播站新人必须决定是否关闭它。"},
+  {"id":"campus_02","genre":"campus","inspiration":"全班成绩被匿名调换，唯一没受影响的学生成了所有人的怀疑对象。"},
+  {"id":"scifi_01","genre":"science_fiction","inspiration":"记忆备份员发现客户删除的记忆里反复出现自己。"},
+  {"id":"scifi_02","genre":"science_fiction","inspiration":"火星基地的 AI 宣布氧气只够两人，但基地里共有三名幸存者。"}
+]
