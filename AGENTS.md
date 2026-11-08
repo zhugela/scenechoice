@@ -28,6 +28,20 @@ When asked to teach this project:
 5. Record what the learner can explain, what remains uncertain, and the next smallest exercise.
 6. Distinguish “code exists” from “learner has mastered it.”
 
+## AI-Assisted Development Workflow
+
+Core principle: the biggest risk is not that AI writes incorrect code, but that code the owner does not understand remains in the project. Optimize for reading and verification, not generation speed.
+
+Before each implementation unit:
+
+1. State the input, output, boundary conditions, and acceptance criteria. Do not implement until these are clear.
+2. Implement only one small unit at a time, sized so the owner can read it immediately.
+3. After generation, pause for the owner to explain in one sentence what it does, identify the key lines, and ask about unfamiliar syntax or libraries.
+4. Verify both a normal path and at least one relevant failure path. “Should work” is not evidence.
+5. Record one concise “why” for non-obvious design choices in a comment, test name, commit message, or learning note.
+
+Do not continue stacking implementation units while the previous unit remains unread, unexplained, or unverified.
+
 Recommended reading order:
 
 1. `app/schemas/story_blueprint.py`
