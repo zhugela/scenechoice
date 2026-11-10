@@ -25,7 +25,7 @@ The interesting engineering is not "call an LLM" — it is **not trusting its ou
 | Stage | Content | State |
 |---|---|---|
 | M0 | FastAPI skeleton, config, unified response/exception, request ID, pytest suite | ✅ done |
-| M1 | Story-planning PoC — schema, validator, retry loop, preview API, eval set | ✅ code complete · ⏳ real-model eval pending |
+| M1 | Story-planning PoC — schema, validator, retry loop, preview API, eval set | ✅ code complete · ✅ 20/20 structure eval · ⏳ story review + owner learning |
 | M2 | Domain model, SQL, persistence | not started |
 
 Out of scope for M1 by design: database, RAG, LangGraph, prose generation, frontend.
@@ -36,7 +36,7 @@ Out of scope for M1 by design: database, RAG, LangGraph, prose generation, front
 POST /api/story-plans/preview
 Content-Type: application/json
 
-{ "inspiration": "a lighthouse keeper who collects lost letters", "episodes": 3 }
+{ "inspiration": "a lighthouse keeper who collects lost letters", "episode_count": 3 }
 ```
 
 Returns a validated blueprint: title, characters, two core states, episode outline and ending conditions. The endpoint is a **preview** — nothing is persisted.

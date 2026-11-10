@@ -68,6 +68,8 @@ class BlueprintValidator:
             unknown_characters = set(episode.character_ids) - known_characters
             if unknown_characters:
                 issues.append(ValidationIssue(f"{path}.character_ids", f"unknown ids: {sorted(unknown_characters)}"))
+            if duplicated_characters := _duplicates(episode.character_ids):
+                issues.append(ValidationIssue(f"{path}.character_ids", f"duplicate ids: {sorted(duplicated_characters)}"))
             if episode_index < len(blueprint.episodes) - 1:
                 if not episode.cliffhanger or not episode.cliffhanger.strip():
                     issues.append(ValidationIssue(f"{path}.cliffhanger", "required before final episode"))

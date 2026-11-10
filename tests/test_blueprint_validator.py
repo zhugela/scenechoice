@@ -143,6 +143,11 @@ def _missing_ending_category(data: dict) -> None:
     data["endings"][1]["category"] = "low"
 
 
+def _duplicate_episode_character(data: dict) -> None:
+    first_id = data["characters"][0]["id"]
+    data["episodes"][0]["character_ids"] = [first_id, first_id]
+
+
 @pytest.mark.parametrize(
     ("mutate", "expected"),
     [
@@ -163,6 +168,11 @@ def _missing_ending_category(data: dict) -> None:
         pytest.param(_zero_delta, "at least one delta must be non-zero", id="rule6-zero-delta"),
         pytest.param(_unreachable_conditions, "unreachable", id="rule8-unreachable"),
         pytest.param(_missing_ending_category, "must include low, high and mixed", id="rule9-categories"),
+        pytest.param(
+            _duplicate_episode_character,
+            "episodes.0.character_ids: duplicate ids",
+            id="rule10-episode-character-duplicate",
+        ),
     ],
 )
 def test_each_business_rule_is_reported_independently(mutate, expected: str) -> None:
