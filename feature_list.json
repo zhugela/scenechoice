@@ -1,0 +1,80 @@
+{
+  "project": "scenechoice",
+  "last_updated": "2026-11-12",
+  "rules": {
+    "single_active_feature": true,
+    "passing_requires_evidence": true,
+    "do_not_skip_verification": true
+  },
+  "status_legend": {
+    "not_started": "功能还没开始做。",
+    "in_progress": "这个功能是当前唯一正在进行的任务。",
+    "blocked": "因为已记录的阻塞问题，当前无法继续推进。",
+    "passing": "要求的验证已经通过，并且证据已经记录。"
+  },
+  "features": [
+    {
+      "id": "sc-m1-01",
+      "priority": 1,
+      "area": "m1-implementation",
+      "title": "M1 结构、业务规则、错误处理、可观测性实现基线",
+      "user_visible_behavior": "一句灵感进来，只有过了 Pydantic 结构检查 + BlueprintValidator 十条业务规则的蓝图才会返回；连续三次不合格则明确报错，不留残缺结果。",
+      "status": "passing",
+      "verification": [
+        "cd scenechoice && .venv/Scripts/python.exe -m pytest -q",
+        "确认输出形如 94 passed，无 failed / error"
+      ],
+      "evidence": [
+        "2026-11-12 `pytest -q` → 94 passed, 1 warning in 2.34s",
+        "docs/quality/2026-11-06-scenechoice-m1-acceptance-audit.md 第 2 节：结构约束/业务规则/错误分类/API 契约/追踪日志均为“已证明”"
+      ],
+      "notes": "第 10 条业务规则（不依赖未定义的关键道具）只做到部分实现，靠 Prompt + 人工评分兜底，审计里已明确不假装完全解决。"
+    },
+    {
+      "id": "sc-m1-02",
+      "priority": 2,
+      "area": "m1-eval",
+      "title": "固定 20 题真实 DeepSeek 评测 ≥16 题通过",
+      "user_visible_behavior": "用固定的 20 个真实灵感跑一遍真实模型，报告里结构通过数 ≥16，证明不是只有单元测试能过。",
+      "status": "passing",
+      "verification": [
+        "跑 evals 目录下的固定 20 题评测脚本",
+        "打开 evals/reports/story-planning-20261107-013109.json，确认 passed == 20"
+      ],
+      "evidence": [
+        "docs/quality/2026-11-06-scenechoice-m1-acceptance-audit.md 第 2 节：2026-11-07 固定 20 题评测 20/20 通过"
+      ],
+      "notes": "2026-11-12 未重跑（会花真实 token），证据沿用 11-07 的本地报告文件。"
+    },
+    {
+      "id": "sc-m1-03",
+      "priority": 3,
+      "area": "learning-acceptance",
+      "title": "负责人个人掌握验收：学习清单 6 项 + 口述答辩",
+      "user_visible_behavior": "本人能脱稿讲清 Pydantic 与 BlueprintValidator 为什么各管一层、三次重试何时放弃，并亲手改过一处规则。",
+      "status": "not_started",
+      "verification": [
+        "打开 docs/learning/scenechoice-m1-learning-review.md",
+        "确认文中 6 个复选项全部勾选，并写下自己的口述要点",
+        "由本人脱稿讲一遍 M1 数据流，卡壳处回到对应源码重读"
+      ],
+      "evidence": [],
+      "notes": "2026-11-12 查：该文件 6 个复选项 0 已勾选，验收未开始。这是唯一真正卡住 M1 阶段门的东西。"
+    },
+    {
+      "id": "sc-m1-04",
+      "priority": 4,
+      "area": "stage-gate",
+      "title": "M1 阶段门判定：是否进入 M2",
+      "user_visible_behavior": "M1 四个通过条件全部有证据后，才允许开 M2（数据库/前端/RAG/多智能体）。",
+      "status": "blocked",
+      "verification": [
+        "逐条核对 audit 第 1 节的四个条件",
+        "确认 sc-m1-01 / sc-m1-02 / sc-m1-03 三条都为 passing",
+        "更新 docs/quality 下审计文件结论，并同步 AGENTS.md 的 Current Stage"
+      ],
+      "evidence": [],
+      "notes": "被 sc-m1-03 卡住；实现与真实评测两条已过，只差个人掌握。"
+    }
+  ]
+}
