@@ -9,12 +9,33 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-12：94 passed）
-- 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）或 `powershell -File docs/harness/check.ps1`
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-14：98 passed）
+- 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 
 ## 会话记录
+
+### Session 003
+
+- 日期：2026-11-14
+- 本轮目标：修复规则 9 的同质结局漏洞，并收紧 low/high 结局的语义区间
+- 已完成：
+  - 基线 `94 passed`；先复现三个不同 category 使用相同条件时校验无报错
+  - 新增大小写、顺序无关的结局条件签名（metric_id + operator + value），拒绝不同 category 共用同一签名
+  - low/high 结局现在必须分别允许到达 0..49 / 50..100 的状态带；50 是临时中点边界，已在代码注释注明“阈值待产品确认”
+  - 新增 4 条回归测试：同质签名报错、low 仅高值报错、high 仅低值报错、合法差异条件通过
+  - 未修改既有测试预期、Schema、feature_list 状态或 M1 阶段门
+- 运行过的验证：
+  - 缺陷复现：`.venv/Scripts/python.exe -m pytest -q tests/test_blueprint_validator.py::test_different_categories_cannot_share_identical_conditions --basetemp .pytest_cache\\tdd-reproduce` → 1 passed（证明旧行为漏报）
+  - 红灯：`tests/test_blueprint_validator.py` → 3 failed, 27 passed（分别击中 P1-A、low 区间、high 区间）
+  - 针对性验证：`tests/test_blueprint_validator.py` → 30 passed
+  - 全量验证：`.venv/Scripts/python.exe -m pytest -q` → 98 passed, 1 warning in 2.18s
+  - 最终体检：`./docs/harness/init.sh` → 依赖同步、98 passed, 1 warning in 2.08s、`compileall app` 通过
+- 环境说明：全局 `%TEMP%` 中有不可访问的 pytest 遗留链接，本轮验证将 TEMP/TMP/PYTEST_DEBUG_TEMPROOT 指向项目内 `.pytest_cache/harness-tmp`
+- 已知风险：50 中点只是临时保守阈值；产品定义 low/high 分界后需复核
+- 另发现：`docs/harness/check.ps1` 仍按上溯两级找仓库根，会把 `docs/` 当成根目录；本次未改这个无关问题，最终验证改用 `init.sh`
+- 下一步最佳动作：负责人 review 本次 validator 改动；M1 阶段门仍需完成 `sc-m1-03` 个人掌握验收
 
 ### Session 002
 

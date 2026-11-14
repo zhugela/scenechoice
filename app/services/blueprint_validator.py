@@ -38,6 +38,40 @@ def _ending_reachable(ending: EndingBlueprint, metric_ids: list[str]) -> bool:
     return False
 
 
+def _ending_condition_signature(ending: EndingBlueprint) -> tuple[tuple[str, str, int], ...]:
+    # Labels alone cannot distinguish endings whose executable rules are identical.
+    return tuple(
+        sorted(
+            {
+                (condition.metric_id, condition.operator, condition.value)
+                for condition in ending.conditions
+            }
+        )
+    )
+
+
+def _ending_reaches_value_band(
+    ending: EndingBlueprint, metric_ids: list[str], band: range
+) -> bool:
+    # 阈值待产品确认：产品尚未定义 low/high 的精确边界，暂以 0..100 的中点为保守边界。
+    # The band is reachable when at least one constrained metric can occupy it.
+    for metric_id in metric_ids:
+        metric_conditions = [
+            condition for condition in ending.conditions if condition.metric_id == metric_id
+        ]
+        if not metric_conditions:
+            continue
+        if any(
+            all(
+                _condition_matches(condition.operator, actual, condition.value)
+                for condition in metric_conditions
+            )
+            for actual in band
+        ):
+            return True
+    return False
+
+
 class BlueprintValidator:
     def validate(self, blueprint: StoryBlueprint) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
@@ -99,10 +133,39 @@ class BlueprintValidator:
         priorities = [ending.priority for ending in blueprint.endings]
         if _duplicates([str(value) for value in priorities]):
             issues.append(ValidationIssue("endings.priority", "priorities must be unique"))
+        signatures: dict[tuple[tuple[str, str, int], ...], set[str]] = {}
+        for ending in blueprint.endings:
+            signatures.setdefault(_ending_condition_signature(ending), set()).add(ending.category)
+        if any(len(categories_for_signature) > 1 for categories_for_signature in signatures.values()):
+            issues.append(
+                ValidationIssue(
+                    "endings.conditions",
+                    "different categories cannot share identical conditions",
+                )
+            )
         for index, ending in enumerate(blueprint.endings):
             if unknown := {item.metric_id for item in ending.conditions} - known_metrics:
                 issues.append(ValidationIssue(f"endings.{index}.conditions", f"unknown metric ids: {sorted(unknown)}"))
                 continue
             if not _ending_reachable(ending, metric_ids):
                 issues.append(ValidationIssue(f"endings.{index}.conditions", "conditions are unreachable"))
+                continue
+            if ending.category == "low" and not _ending_reaches_value_band(
+                ending, metric_ids, range(50)
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"endings.{index}.category",
+                        "low ending must allow a low-value state",
+                    )
+                )
+            if ending.category == "high" and not _ending_reaches_value_band(
+                ending, metric_ids, range(50, 101)
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"endings.{index}.category",
+                        "high ending must allow a high-value state",
+                    )
+                )
         return issues

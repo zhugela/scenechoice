@@ -63,6 +63,43 @@ def test_cross_metric_ending_conditions_can_be_reachable() -> None:
     assert validate(data) == []
 
 
+def test_different_categories_cannot_share_identical_conditions() -> None:
+    data = valid_blueprint_data()
+    shared_conditions = [{"metric_id": "reputation", "operator": "gte", "value": 70}]
+    for ending in data["endings"]:
+        ending["conditions"] = shared_conditions
+
+    assert any("different categories cannot share identical conditions" in issue for issue in validate(data))
+
+
+def test_low_ending_cannot_require_only_high_values() -> None:
+    data = valid_blueprint_data()
+    data["endings"][0]["conditions"] = [{"metric_id": "reputation", "operator": "gte", "value": 70}]
+    data["endings"][1]["conditions"] = [{"metric_id": "reputation", "operator": "gte", "value": 80}]
+    data["endings"][2]["conditions"] = [
+        {"metric_id": "reputation", "operator": "gte", "value": 30},
+        {"metric_id": "reputation", "operator": "lt", "value": 70},
+    ]
+
+    assert any("low ending must allow a low-value state" in issue for issue in validate(data))
+
+
+def test_high_ending_cannot_require_only_low_values() -> None:
+    data = valid_blueprint_data()
+    data["endings"][0]["conditions"] = [{"metric_id": "reputation", "operator": "lt", "value": 20}]
+    data["endings"][1]["conditions"] = [{"metric_id": "reputation", "operator": "lt", "value": 30}]
+    data["endings"][2]["conditions"] = [
+        {"metric_id": "reputation", "operator": "gte", "value": 30},
+        {"metric_id": "reputation", "operator": "lt", "value": 70},
+    ]
+
+    assert any("high ending must allow a high-value state" in issue for issue in validate(data))
+
+
+def test_distinct_category_condition_bands_are_allowed() -> None:
+    assert validate(valid_blueprint_data()) == []
+
+
 def test_cross_metric_constraints_still_detect_same_metric_contradiction() -> None:
     data = valid_blueprint_data()
     data["endings"][2]["conditions"] = [
