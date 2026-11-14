@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Python / FastAPI 项目的 init.sh（改自 learn-harness-engineering/docs/zh/resources/templates/init.sh）
-# 用法：复制到项目根，改名 init.sh，chmod +x init.sh，然后 ./init.sh
-# 和原版的三处差别：① 自动找项目内 .venv；② pytest 空测试返回 5 不算失败；③ 启动命令按 FastAPI 给。
+# 位置：docs/harness/init.sh。用法：在项目根执行 ./docs/harness/init.sh
+# 脚本会把工作目录切到仓库根（脚本所在目录向上两级），所以在哪调用都行。
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 if [ -x ".venv/Scripts/python.exe" ]; then

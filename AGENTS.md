@@ -23,15 +23,34 @@ Two state files are mandatory. They are the only cross-session truth; chat histo
 
 Before touching code:
 
-1. Run `./init.sh`. If baseline verification fails, repair the environment first instead of stacking new work.
-2. Read `progress.md` (current verified state, last session, next best action).
-3. Read `feature_list.json` and pick exactly one `not_started` or `in_progress` feature. Never work on two at once.
+1. Run `./docs/harness/init.sh`. If baseline verification fails, repair the environment first instead of stacking new work.
+2. Read `docs/harness/progress.md` (current verified state, last session, next best action).
+3. Read `docs/harness/feature_list.json` and pick exactly one `not_started` or `in_progress` feature. Never work on two at once.
 
 Before ending a session:
 
-1. Update `progress.md`: what was verified, what broke, next best action.
-2. Update the feature status in `feature_list.json`. `passing` requires evidence recorded in its `evidence` field.
+1. Update `docs/harness/progress.md`: what was verified, what broke, next best action.
+2. Update the feature status in `docs/harness/feature_list.json`. `passing` requires evidence recorded in its `evidence` field.
 3. Never weaken tests, or the M1 stage gate, to make progress look better.
+
+## Documentation Routing
+
+`AGENTS.md` is a short router, not the source of truth. Read the specific doc when the task touches it.
+
+| Topic | Read |
+|---|---|
+| Architecture, layers, boundaries | `docs/ARCHITECTURE.md` |
+| Design rationale and decisions | `docs/DESIGN.md` |
+| Product scope and spec | `docs/product-specs/index.md` |
+| Plans, milestones, what's next | `docs/PLANS.md`, `docs/exec-plans/active/` |
+| Tech debt and known gaps | `docs/exec-plans/tech-debt-tracker.md` |
+| Quality scorecard | `docs/QUALITY_SCORE.md` |
+| Reliability, retry, cost controls | `docs/RELIABILITY.md` |
+| Secrets, privacy, safety | `docs/SECURITY.md` |
+| Core engineering beliefs | `docs/design-docs/core-beliefs.md` |
+| Frontend (not applicable until M6) | `docs/FRONTEND.md` |
+| Generated artifacts | `docs/generated/` |
+| External references | `docs/references/` |
 
 ## Learning-Coach Rules
 
@@ -81,4 +100,5 @@ From this directory, the standard test command is:
 python -m pytest -q
 ```
 
+One-command health check: `./docs/harness/init.sh` (git-bash) or `powershell -File docs/harness/check.ps1`.
 The repository also runs `.github/workflows/ci.yml` on GitHub (Python 3.12, `pytest -q`).

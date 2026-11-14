@@ -10,11 +10,26 @@
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
 - 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-12：94 passed）
-- 一键体检：`./init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）
+- 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）或 `powershell -File docs/harness/check.ps1`
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 
 ## 会话记录
+
+### Session 002
+
+- 日期：2026-11-13
+- 本轮目标：按 repo-template 骨架把规范文件归入 `docs/`，根目录只留三个入口
+- 已完成：
+  - 根目录只保留 `AGENTS.md` / `CLAUDE.md` / `README.md`
+  - harness 状态文件迁入 `docs/harness/`（progress / feature_list / init.sh / check.ps1 / session-handoff / clean-state-checklist / evaluator-rubric）
+  - `quality-document.md` 迁为 `docs/quality/QUALITY_SCORE.md`
+  - 新建 `docs/ARCHITECTURE.md` / `DESIGN.md` / `PLANS.md` / `PRODUCT_SENSE.md` / `FRONTEND.md` / `RELIABILITY.md` / `SECURITY.md`
+  - 新建 `docs/design-docs/`、`docs/exec-plans/`、`docs/generated/`、`docs/product-specs/`、`docs/references/`
+  - `AGENTS.md` 增加 Documentation Routing 路由表，更新所有路径
+  - `init.sh` / `check.ps1` 改为从 `docs/harness/` 上溯两级定位仓库根
+- 运行过的验证：`bash docs/harness/init.sh` → 94 passed、退出码 0；根目录仅剩 3 个 `.md`
+- 已知风险：`FRONTEND.md`、`generated/db-schema.md`、`references/nixpacks` 当前不适用，已标注触发条件；`quality.md` 旧记录里的路径是历史事实，未改
 
 ### Session 001
 

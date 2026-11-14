@@ -1,6 +1,7 @@
 # check.ps1 — 一键体检：测试 + 语法 + 静态检查（缺 ruff 时自动跳过）
+# 位置：docs/harness/check.ps1。在项目根执行：powershell -File docs/harness/check.ps1
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $root
 
 # 选解释器：优先项目内 .venv

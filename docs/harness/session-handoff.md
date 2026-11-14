@@ -30,5 +30,5 @@
 ## 命令
 
 - 启动：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 验证：`.venv/Scripts/python.exe -m pytest -q`（或 `./init.sh` / `powershell -File check.ps1`）
+- 验证：`.venv/Scripts/python.exe -m pytest -q`（或 `./docs/harness/init.sh` / `powershell -File docs/harness/check.ps1`）
 - 定向调试：`.venv/Scripts/python.exe -m pytest tests/test_blueprint_validator.py -q`
