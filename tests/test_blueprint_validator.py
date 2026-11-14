@@ -54,6 +54,64 @@ def test_different_intent_text_cannot_hide_identical_effects() -> None:
     assert any("different directions" in issue for issue in validate(data))
 
 
+def test_zero_delta_effect_cannot_hide_identical_choice_effects() -> None:
+    data = valid_blueprint_data()
+    data["episodes"][0]["choices"][0]["effects"] = [
+        {"metric_id": "reputation", "delta": 10},
+    ]
+    data["episodes"][0]["choices"][1]["effects"] = [
+        {"metric_id": "reputation", "delta": 10},
+        {"metric_id": "mindset", "delta": 0},
+    ]
+
+    issues = validate(data)
+
+    assert any("different directions" in issue for issue in issues)
+
+
+def test_opposite_choice_effects_are_allowed() -> None:
+    data = valid_blueprint_data()
+    data["episodes"][0]["choices"][0]["effects"] = [
+        {"metric_id": "reputation", "delta": 10},
+    ]
+    data["episodes"][0]["choices"][1]["effects"] = [
+        {"metric_id": "reputation", "delta": -10},
+    ]
+
+    assert validate(data) == []
+
+
+def test_zero_delta_effects_do_not_change_effect_equality() -> None:
+    data = valid_blueprint_data()
+    data["episodes"][0]["choices"][0]["effects"] = [
+        {"metric_id": "reputation", "delta": 10},
+        {"metric_id": "mindset", "delta": 0},
+    ]
+    data["episodes"][0]["choices"][1]["effects"] = [
+        {"metric_id": "mindset", "delta": 0},
+        {"metric_id": "reputation", "delta": 10},
+    ]
+
+    issues = validate(data)
+
+    assert any("different directions" in issue for issue in issues)
+
+
+def test_zero_only_choice_reports_rule_six_without_rule_four() -> None:
+    data = valid_blueprint_data()
+    data["episodes"][0]["choices"][0]["effects"] = [
+        {"metric_id": "reputation", "delta": 0},
+    ]
+    data["episodes"][0]["choices"][1]["effects"] = [
+        {"metric_id": "reputation", "delta": -10},
+    ]
+
+    issues = validate(data)
+
+    assert "episodes.0.choices.0.effects: at least one delta must be non-zero" in issues
+    assert not any("different directions" in issue for issue in issues)
+
+
 def test_cross_metric_ending_conditions_can_be_reachable() -> None:
     data = valid_blueprint_data()
     data["endings"][2]["conditions"] = [

@@ -114,9 +114,18 @@ class BlueprintValidator:
                     issues.append(ValidationIssue(f"{path}.resolution", "final episode must resolve the main conflict"))
 
             first, second = episode.choices
-            first_effects = sorted((effect.metric_id, effect.delta) for effect in first.effects)
-            second_effects = sorted((effect.metric_id, effect.delta) for effect in second.effects)
-            if first_effects == second_effects:
+            # Zero-delta effects do not change state and must not disguise equal outcomes.
+            first_effects = sorted(
+                (effect.metric_id, effect.delta)
+                for effect in first.effects
+                if effect.delta != 0
+            )
+            second_effects = sorted(
+                (effect.metric_id, effect.delta)
+                for effect in second.effects
+                if effect.delta != 0
+            )
+            if first_effects and first_effects == second_effects:
                 issues.append(ValidationIssue(f"{path}.choices", "choices must lead in different directions"))
             for choice_index, choice in enumerate(episode.choices):
                 effect_ids = [effect.metric_id for effect in choice.effects]

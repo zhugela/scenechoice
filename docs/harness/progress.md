@@ -9,12 +9,33 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-14：98 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-14：102 passed）
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 
 ## 会话记录
+
+### Session 004
+
+- 日期：2026-11-14
+- 本轮目标：修复规则 4 可被 `delta: 0` 假效果绕过的 P2-1 缺陷
+- 已完成：
+  - 基线 `98 passed`；新增反例测试后先确认旧逻辑不报规则 4
+  - 将反例断言改为必须报错，取得 `1 failed, 98 passed` 的红灯证据
+  - 规则 4 比较前剔除 `delta == 0` 的效果，只比较实际状态变化
+  - 任一侧没有非零效果时不重复报规则 4，由规则 6 分别报告该选择缺少非零变化
+  - 新增 4 条测试：零效果伪装相同结果、方向相反仍合法、双方夹带零效果仍相同、单侧全零只报规则 6
+  - 修正验收审计中规则 4 的表述：仅比较 effects，注明 intent 字段当前未被使用
+  - 未修改已有测试预期、Schema、错误码映射、规则 10、feature_list 状态或 M1 阶段门
+- 运行过的验证：
+  - 基线：`.venv/Scripts/python.exe -m pytest -q` → 98 passed, 1 warning
+  - 反例旧行为：99 passed（证明新增测试复现漏报）
+  - 红灯：1 failed, 98 passed（命中零效果伪装相同结果）
+  - 全量验证：`.venv/Scripts/python.exe -m pytest -q` → 102 passed, 1 warning in 1.71s
+- 环境说明：全局 `%TEMP%` 中仍有不可访问的 pytest 遗留链接；本轮将 TEMP/TMP 指向项目内 `.pytest-tmp` 后运行同一测试命令
+- 已知风险：无新增业务风险；系统临时目录遗留链接仍需本机环境处理
+- 下一步最佳动作：负责人 review 本次 validator 改动与新增测试；M1 阶段门仍等待 `sc-m1-03` 个人掌握验收
 
 ### Session 003
 
