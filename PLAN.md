@@ -1,49 +1,56 @@
 # PLAN
 
-目标：修复巡检报告 P2-1 —— 规则 4（两个选择必须方向不同）能被「delta: 0 的假效果」绕过。
+目标：修复巡检报告 P2-2 —— DeepSeek 返回的永久 4xx（400/404/422）被错误地映射成「模型临时不可用 502」，导致调用方白白重试。
+
+## 错误码方案（已定，按此实现）
+
+| DeepSeek 返回 | 现在 | 改成 | 理由 |
+|---|---|---|---|
+| 401 / 403 | 503 / 50302 | **不变** | 凭证被拒，需要人换 key |
+| 408 / 429 | 502 / 50201 | **不变** | 真的是临时限流/超时，重试有意义 |
+| 5xx | 502 / 50201 | **不变** | 上游故障，可重试 |
+| **400 / 404 / 422 / 其他 4xx** | 502 / 50201 | **400 / 50202** | 请求本身错了，重试一万次也一样 |
+
+错误文案改为「story model rejected the request」（不再说 temporarily unavailable）。
 
 ## 约束
 
 1. 不许改 `tests/` 里已有用例的预期结果，只允许新增。
-2. 只许收紧校验，不许放宽；不许为了让测试变绿删规则。
+2. 不许为了让测试变绿放宽判定。
 3. 每处改动必须配测试。
-4. 收工前 `.venv/Scripts/python.exe -m pytest -q` 必须全绿（当前基线 **98 passed**）。
+4. 收工前 `.venv/Scripts/python.exe -m pytest -q` 必须全绿（当前基线 **102 passed**）。
 5. 不许 `git add` / `git commit` / `git push`。
-6. 只动本 PLAN 点名的范围，别顺手重构。
+6. 只动 `app/clients/deepseek.py`、`app/api/story_plans.py` 和对应测试。
 
 ## 背景事实（已核实，不要重新推测）
 
-- 问题位置：`app/services/blueprint_validator.py:82-86`（比较两集选择的效果）与 `:93-94`（非零检查）
-- 当前实现：
+- `app/clients/deepseek.py:90-98`：
   ```python
-  first_effects = sorted((effect.metric_id, effect.delta) for effect in first.effects)
-  second_effects = sorted((effect.metric_id, effect.delta) for effect in second.effects)
-  if first_effects == second_effects:
-      issues.append(ValidationIssue(f"{path}.choices", "choices must lead in different directions"))
+  retryable = status_code in {408, 429} or status_code >= 500
   ```
-- 反例（报告原文）：
-  - 选择 A：`effects=[{"metric_id":"reputation","delta":10}]`
-  - 选择 B：`effects=[{"metric_id":"reputation","delta":10},{"metric_id":"mindset","delta":0}]`
-  - 两个排序列表不相等 → 不报「方向不同」；B 含非零 delta → 规则 6 也不报
-  - **实际状态变化完全相同**，模型只要补一个 `delta: 0` 就能绕过
-- 设计依据：设计文档 `:121`「每集两个选择的意图和后果不能完全相同」
-- 报告建议：比较前剔除 `delta == 0` 的效果，再判断非零效果集合是否相同；补对应测试
+  4xx（非 408/429）时 retryable=False，立即抛 `StoryModelError`。
+- `app/api/story_plans.py:36-43`：
+  ```python
+  if exc.status_code in {401, 403}:
+      raise AppError("story model credentials were rejected", code=50302, status_code=503)
+  raise AppError("story model is temporarily unavailable", code=50201, status_code=502)
+  ```
+  没有分支处理 400/404/422，全部落到 502。
+- 现有测试只覆盖 401→50302（`tests/test_story_plans_api.py:82-94`）与 `StoryPlanningError`→42201（`:97-108`），**50200/50202 分支没有任何运行时测试**。
 
 ## 子任务队列
 
 - [ ] 基线确认：`.venv/Scripts/python.exe -m pytest -q`，记录 passed 数量
-- [ ] 复现缺陷：写一条测试 —— 上面那个反例（A 只有 reputation+10，B 多一个 mindset:0），断言当前**不报错**，先让它红着当证据
-- [ ] 修：比较前剔除 `delta == 0` 的效果（注意：如果剔除后两边都为空，要按「两个选择都没效果」处理，想清楚这种情况该报什么错）
-- [ ] 把复现测试改成断言**必须报错**（变绿）
-- [ ] 补第二条测试：两个选择效果确实不同时（如 A: reputation+10，B: reputation-10）必须通过 —— 防过度收紧
-- [ ] 补第三条测试：覆盖「剔除 delta:0 后相等」与「一侧全零」两个边角
-- [ ] 修正文档表述：`docs/quality/2026-11-06-scenechoice-m1-acceptance-audit.md:52` 写着「intent 与 effect 同时比较」，但代码从未读取 `choice.intent`。改成「仅比较 effects」，并注明 intent 字段当前未被使用（**只改这一处表述，不要删字段、不要加 intent 校验**）
-- [ ] 跑全量测试，把结果写进 `docs/harness/progress.md`（新开 Session 004 段落）
-- [ ] 输出改动摘要：改了哪几处、边角怎么处理的、新增几条测试
+- [ ] 复现缺陷：写一条测试，让 FakeClient 返回 400，断言当前 API 返回 **502/50201**，先让它红着当证据
+- [ ] 改 `app/api/story_plans.py`：加 4xx（排除 401/403/408/429）分支 → `status_code=400, code=50202`
+- [ ] 把复现测试改成断言 **400/50202**（变绿）
+- [ ] 补测试：401→50302（确认没被改坏）、403→50302、408→50201、429→50201、500→50201、422→400/50202
+- [ ] 确认 `deepseek.py` 的 retryable 判定不需要动（4xx 本来就不重试）；如需要请说明理由
+- [ ] 跑全量测试，结果写进 `docs/harness/progress.md`（新开 Session 005 段落）
+- [ ] 输出改动摘要：改了哪几处、错误码最终怎么定的、新增几条测试
 
 ## 不要做的事
 
-- 不要动 `app/schemas/story_blueprint.py` 的 `intent` 字段本身
-- 不要碰 `app/clients/deepseek.py` 的错误码映射（那是 P2-2，需要本人先决策）
-- 不要碰规则 10（P2-3，需要本人先决策）
-- 不要重构 validator 整体结构
+- 不要动规则 10（P2-3，需要产品决策，下一轮）
+- 不要碰 `blueprint_validator.py`（规则4/规则9 已修完，别回改）
+- 不要重构 AppError 或统一异常处理的结构

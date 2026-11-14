@@ -9,12 +9,34 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-14：102 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-14：113 passed）
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 
 ## 会话记录
+
+### Session 005
+
+- 日期：2026-11-14
+- 本轮目标：修复巡检报告 P2-2，DeepSeek 永久 4xx 不再被错误映射为可重试的 502
+- 已完成：
+  - 基线 `102 passed`；首次 `init.sh` 因全局 uv 缓存锁不可访问而失败，改用可写的任务临时缓存后重跑通过
+  - 先新增 400 回归测试，旧逻辑返回 502，取得 `1 failed, 102 passed` 的红灯证据
+  - `story_plans.py` 将排除 401/403、408/429 的其他 4xx 映射为 400/50202，文案改为 `story model rejected the request`
+  - 补状态矩阵：401/403→503/50302，408/429/500→502/50201，422→400/50202
+  - 矩阵测试发现初版范围过宽，408/429 曾误落 400 分支；已显式排除并重新验证
+  - OpenAPI 增补 400 响应契约并新增测试
+  - 新增客户端测试确认 400/404/422 的 `retryable=False`；`deepseek.py` 无需修改
+  - 未修改已有测试预期、feature_list 状态或 M1 阶段门
+- 运行过的验证：
+  - 启动检查：`./docs/harness/init.sh` → 102 passed, 1 warning
+  - 红灯：400 回归测试 → 1 failed, 102 passed
+  - 状态矩阵中间态：408/429 分支过宽 → 2 failed, 107 passed
+  - 全量验证：`.venv/Scripts/python.exe -m pytest -q` → 113 passed, 1 warning in 1.52s
+- 环境说明：本机 `.venv` 无 pip，`init.sh` 会调用 uv；全局 uv 缓存权限不可用，本轮使用任务专属可写缓存和 pytest 临时目录
+- 已知风险：仅有现有 Starlette TestClient/httpx 弃用警告；M1 阶段门仍等待 `sc-m1-03` 个人掌握验收
+- 下一步最佳动作：负责人 review P2-2 改动与新增状态矩阵测试；M1 阶段门继续等待个人掌握验收
 
 ### Session 004
 

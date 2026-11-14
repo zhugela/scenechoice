@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/story-plans", tags=["story-plans"])
     summary="Generate a validated interactive-story blueprint",
     description="Generate a complete 3- or 5-episode blueprint without saving it.",
     responses={
+        400: {"model": ApiResponse, "description": "Story model rejected the request"},
         422: {"model": ApiResponse, "description": "Invalid request or blueprint generation failure"},
         502: {"model": ApiResponse, "description": "Story model is unavailable"},
         503: {"model": ApiResponse, "description": "Story model is not configured"},
@@ -39,6 +40,16 @@ async def preview_story_plan(
                 "story model credentials were rejected",
                 code=50302,
                 status_code=503,
+            ) from exc
+        if (
+            exc.status_code is not None
+            and 400 <= exc.status_code < 500
+            and exc.status_code not in {408, 429}
+        ):
+            raise AppError(
+                "story model rejected the request",
+                code=50202,
+                status_code=400,
             ) from exc
         raise AppError("story model is temporarily unavailable", code=50201, status_code=502) from exc
     except StoryPlanningError as exc:

@@ -66,6 +66,16 @@ def test_deepseek_client_marks_rate_limit_as_retryable() -> None:
     assert error.value.retry_after_seconds == 2
 
 
+@pytest.mark.parametrize("status_code", [400, 404, 422])
+def test_deepseek_client_does_not_retry_permanent_client_errors(status_code: int) -> None:
+    client = make_client(lambda request: httpx.Response(status_code, text="rejected"))
+    with pytest.raises(DeepSeekClientError) as error:
+        asyncio.run(client.complete([{"role": "user", "content": "hi"}]))
+
+    assert error.value.retryable is False
+    assert error.value.status_code == status_code
+
+
 def test_deepseek_client_marks_invalid_provider_payload_as_retryable() -> None:
     client = make_client(lambda request: httpx.Response(200, json={"choices": []}))
     with pytest.raises(DeepSeekClientError) as error:

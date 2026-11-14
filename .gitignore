@@ -26,3 +26,7 @@ Thumbs.db
 evals/output/
 evals/reports/
 *.log
+
+# Node 依赖（Probity TDD 守卫装在这里，不入仓）
+node_modules/
+package-lock.json
