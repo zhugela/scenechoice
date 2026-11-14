@@ -102,6 +102,15 @@ def test_deepseek_client_marks_null_content_as_retryable() -> None:
     assert error.value.retryable is True
 
 
+def test_deepseek_client_preserves_success_status_for_invalid_payload() -> None:
+    client = make_client(lambda request: httpx.Response(200, json={"choices": []}))
+    with pytest.raises(DeepSeekClientError, match="invalid response") as error:
+        asyncio.run(client.complete([{"role": "user", "content": "hi"}]))
+
+    assert error.value.retryable is True
+    assert error.value.status_code == 200
+
+
 def test_deepseek_client_marks_timeout_as_retryable() -> None:
     def timeout_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out", request=request)

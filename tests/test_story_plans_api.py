@@ -1,10 +1,11 @@
 import json
 import logging
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.clients.deepseek import DeepSeekClientError, LlmReply
+from app.clients.deepseek import DeepSeekClient, DeepSeekClientError, LlmReply
 from app.config import get_settings
 from app.dependencies import get_story_planner
 from app.main import create_app
@@ -110,6 +111,96 @@ def test_preview_maps_permanent_provider_rejection_to_bad_request() -> None:
     assert response.json()["message"] == "story model rejected the request"
 
 
+def test_preview_maps_provider_payment_required_to_account_error() -> None:
+    app = create_app()
+    error = DeepSeekClientError("payment required", retryable=False, status_code=402)
+    app.dependency_overrides[get_story_planner] = lambda: FailingPlanner(error)
+
+    response = TestClient(app).post(
+        "/api/story-plans/preview",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == 50303
+    assert response.json()["message"] == "story model account has insufficient balance"
+
+
+@pytest.mark.parametrize("provider_status", [100, 302])
+def test_preview_maps_unexpected_provider_protocol_status(provider_status: int) -> None:
+    provider_attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal provider_attempts
+        provider_attempts += 1
+        return httpx.Response(
+            provider_status,
+            headers={"Location": "https://unexpected.test/redirect"},
+        )
+
+    client = DeepSeekClient(
+        api_key="secret",
+        base_url="https://api.deepseek.test",
+        model="deepseek-chat",
+        timeout=1,
+        transport=httpx.MockTransport(handler),
+    )
+    app = create_app()
+    app.dependency_overrides[get_story_planner] = lambda: StoryPlanner(client)
+
+    response = TestClient(app).post(
+        "/api/story-plans/preview",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    )
+
+    assert provider_attempts == 1
+    assert response.status_code == 502
+    assert response.json()["code"] == 50204
+    assert response.json()["message"] == "story model returned an unexpected protocol status"
+
+
+@pytest.mark.parametrize(
+    "provider_payload",
+    [
+        {"choices": [{"message": {"content": {"unexpected": "object"}}}]},
+        {"model": "fake-model"},
+    ],
+    ids=["non-string-content", "missing-choices"],
+)
+def test_preview_maps_exhausted_malformed_success_payload_to_story_generation_failure(
+    provider_payload: dict,
+) -> None:
+    provider_attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal provider_attempts
+        provider_attempts += 1
+        return httpx.Response(200, json=provider_payload)
+
+    async def no_sleep(seconds: float) -> None:
+        return None
+
+    client = DeepSeekClient(
+        api_key="secret",
+        base_url="https://api.deepseek.test",
+        model="deepseek-chat",
+        timeout=1,
+        transport=httpx.MockTransport(handler),
+    )
+    app = create_app()
+    app.dependency_overrides[get_story_planner] = lambda: StoryPlanner(client, sleep=no_sleep)
+
+    response = TestClient(app).post(
+        "/api/story-plans/preview",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    )
+
+    assert provider_attempts == 3
+    assert response.status_code == 422
+    assert response.json()["code"] == 42201
+    assert response.json()["message"] == "unable to create a valid story plan"
+
+
 @pytest.mark.parametrize(
     ("provider_status", "expected_status", "expected_code", "expected_message"),
     [
@@ -174,6 +265,14 @@ def test_openapi_documents_permanent_provider_rejection() -> None:
     response_schema = operation["responses"]["400"]["content"]["application/json"]["schema"]
 
     assert response_schema["$ref"].endswith("/ApiResponse")
+
+
+def test_openapi_distinguishes_account_and_protocol_provider_errors() -> None:
+    schema = TestClient(create_app()).get("/openapi.json").json()
+    operation = schema["paths"]["/api/story-plans/preview"]["post"]
+
+    assert "50303" in operation["responses"]["503"]["description"]
+    assert "50204" in operation["responses"]["502"]["description"]
 
 
 def test_story_planning_log_contains_incoming_request_id(caplog) -> None:

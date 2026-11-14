@@ -4,6 +4,20 @@ from typing import Any
 import httpx
 
 
+# Single source of truth for "which upstream HTTP status codes are transient and
+# worth retrying". Both the client (the retry decision) and the API layer (the
+# temporary-vs-permanent error mapping) must derive from this predicate instead
+# of each hardcoding their own copy. Lives here, in the client module, because
+# this is provider HTTP-error semantics, and the API already imports the error
+# type from this module — so the contract has a single home without a new layer.
+_RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 429})
+
+
+def is_retryable_status(status_code: int) -> bool:
+    """Return True when an HTTP status code denotes a transient, retryable failure."""
+    return status_code in _RETRYABLE_HTTP_STATUS_CODES or status_code >= 500
+
+
 class DeepSeekClientError(RuntimeError):
     def __init__(
         self,
@@ -89,7 +103,7 @@ class DeepSeekClient:
             )
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
-            retryable = status_code in {408, 429} or status_code >= 500
+            retryable = is_retryable_status(status_code)
             raise DeepSeekClientError(
                 "DeepSeek request failed",
                 retryable=retryable,
@@ -99,4 +113,10 @@ class DeepSeekClient:
         except httpx.TransportError as exc:
             raise DeepSeekClientError("DeepSeek request failed", retryable=True) from exc
         except (IndexError, KeyError, TypeError, ValueError) as exc:
-            raise DeepSeekClientError("DeepSeek returned an invalid response", retryable=True) from exc
+            # Preserve the HTTP status so the API can distinguish a malformed 200 body
+            # from a transport failure after retries are exhausted.
+            raise DeepSeekClientError(
+                "DeepSeek returned an invalid response",
+                retryable=True,
+                status_code=response.status_code,
+            ) from exc

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.clients.deepseek import DeepSeekClientError
+from app.clients.deepseek import DeepSeekClientError, is_retryable_status
 from app.dependencies import get_story_planner
 from app.errors import AppError
 from app.schemas.response import ApiResponse
@@ -24,8 +24,19 @@ router = APIRouter(prefix="/api/story-plans", tags=["story-plans"])
     responses={
         400: {"model": ApiResponse, "description": "Story model rejected the request"},
         422: {"model": ApiResponse, "description": "Invalid request or blueprint generation failure"},
-        502: {"model": ApiResponse, "description": "Story model is unavailable"},
-        503: {"model": ApiResponse, "description": "Story model is not configured"},
+        502: {
+            "model": ApiResponse,
+            "description": (
+                "Story model is unavailable (50201) or returned an unexpected protocol status (50204)"
+            ),
+        },
+        503: {
+            "model": ApiResponse,
+            "description": (
+                "Story model is not configured (50301), credentials were rejected (50302), "
+                "or the account has insufficient balance (50303)"
+            ),
+        },
     },
 )
 async def preview_story_plan(
@@ -41,15 +52,35 @@ async def preview_story_plan(
                 code=50302,
                 status_code=503,
             ) from exc
+        if exc.status_code == 402:
+            raise AppError(
+                "story model account has insufficient balance",
+                code=50303,
+                status_code=503,
+            ) from exc
+        if exc.status_code == 200:
+            # A successful HTTP status with an invalid body means generation failed,
+            # not that the provider itself is currently unavailable.
+            raise AppError(
+                "unable to create a valid story plan",
+                code=42201,
+                status_code=422,
+            ) from exc
         if (
             exc.status_code is not None
             and 400 <= exc.status_code < 500
-            and exc.status_code not in {408, 429}
+            and not is_retryable_status(exc.status_code)
         ):
             raise AppError(
                 "story model rejected the request",
                 code=50202,
                 status_code=400,
+            ) from exc
+        if exc.status_code is not None and exc.status_code < 400:
+            raise AppError(
+                "story model returned an unexpected protocol status",
+                code=50204,
+                status_code=502,
             ) from exc
         raise AppError("story model is temporarily unavailable", code=50201, status_code=502) from exc
     except StoryPlanningError as exc:
