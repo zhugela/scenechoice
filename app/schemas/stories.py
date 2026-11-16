@@ -1,7 +1,7 @@
 """HTTP contracts for persisted story archives."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,6 +36,36 @@ class StoryDetailData(BaseModel):
     blueprint: StoryBlueprint
 
 
+class MetricState(BaseModel):
+    metric_id: str
+    current_value: int = Field(ge=0, le=100)
+
+
+class EpisodeState(BaseModel):
+    number: int = Field(ge=1, le=5)
+    status: str
+
+
+class StoryStateChangeData(BaseModel):
+    sequence: int = Field(ge=1)
+    entity_type: str
+    entity_key: str
+    event_type: str
+    before_state: dict[str, Any] | None
+    after_state: dict[str, Any] | None
+    source: str
+    occurred_at: datetime
+
+
+class StoryStateData(BaseModel):
+    public_id: str
+    status: str
+    metrics: list[MetricState]
+    episodes: list[EpisodeState]
+    last_sequence: int = Field(ge=0)
+    recent_state_changes: list[StoryStateChangeData]
+
+
 class StoryListData(BaseModel):
     items: list[StorySummary]
     total: int = Field(ge=0)
@@ -53,6 +83,12 @@ class StoryDetailResponse(BaseModel):
     code: int = 0
     message: str = "ok"
     data: StoryDetailData
+
+
+class StoryStateResponse(BaseModel):
+    code: int = 0
+    message: str = "ok"
+    data: StoryStateData
 
 
 class StoryListResponse(BaseModel):

@@ -153,6 +153,34 @@ def test_save_and_load_blueprint_round_trip_includes_entire_tree(
     ]
 
 
+def test_blueprint_round_trip_preserves_endings_array_order(
+    session_factory: sessionmaker[Session],
+) -> None:
+    data = valid_blueprint_data()
+    data["endings"] = [
+        data["endings"][1],
+        data["endings"][0],
+        data["endings"][2],
+    ]
+    blueprint = StoryBlueprint.model_validate(data)
+    assert [ending.priority for ending in blueprint.endings] == [2, 1, 3]
+
+    with session_factory() as session:
+        story = save_blueprint(session, blueprint)
+        public_id = story.public_id
+
+    with session_factory() as session:
+        restored = load_blueprint(session, public_id)
+
+    assert restored is not None
+    assert restored.model_dump() == blueprint.model_dump()
+    assert [ending.id for ending in restored.endings] == [
+        "comeback",
+        "quit",
+        "survive",
+    ]
+
+
 def test_save_blueprint_rolls_back_mid_transaction(
     session_factory: sessionmaker[Session],
 ) -> None:
@@ -295,6 +323,81 @@ def test_get_missing_story_returns_404(api_client: TestClient) -> None:
     }
 
 
+def test_get_story_state_returns_persisted_play_progress(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    with session_factory() as session:
+        story = session.scalar(select(Story).where(Story.public_id == created["public_id"]))
+        assert story is not None
+        reputation = next(metric for metric in story.metrics if metric.key == "reputation")
+        first_episode = next(episode for episode in story.episodes if episode.number == 1)
+
+        story.status = "in_progress"
+        reputation.current_value = 7
+        first_episode.status = "completed"
+        session.add(
+            StoryStateChange(
+                story=story,
+                sequence=2,
+                entity_type="metric",
+                entity_key="reputation",
+                event_type="metric_changed",
+                before_state={"current_value": 50},
+                after_state={"current_value": 7},
+                source="player",
+            )
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/stories/{created['public_id']}/state")
+
+    assert response.status_code == 200
+    state = response.json()["data"]
+    assert state["public_id"] == created["public_id"]
+    assert state["status"] == "in_progress"
+    assert state["metrics"] == [
+        {"metric_id": "reputation", "current_value": 7},
+        {"metric_id": "mindset", "current_value": 50},
+    ]
+    assert state["episodes"] == [
+        {"number": 1, "status": "completed"},
+        {"number": 2, "status": "planned"},
+        {"number": 3, "status": "planned"},
+    ]
+    assert state["last_sequence"] == 2
+    assert [change["sequence"] for change in state["recent_state_changes"]] == [2, 1]
+    assert state["recent_state_changes"][0]["after_state"] == {"current_value": 7}
+    assert "blueprint" not in state
+
+    limited = api_client.get(
+        f"/api/stories/{created['public_id']}/state",
+        params={"change_limit": 1},
+    ).json()["data"]
+    assert [change["sequence"] for change in limited["recent_state_changes"]] == [2]
+
+    blueprint = api_client.get(f"/api/stories/{created['public_id']}").json()["data"][
+        "blueprint"
+    ]
+    assert blueprint["metrics"][0]["initial_value"] == 50
+
+
+def test_get_missing_story_state_returns_404(api_client: TestClient) -> None:
+    response = api_client.get("/api/stories/does-not-exist/state")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "code": 40401,
+        "message": "story not found",
+        "data": None,
+    }
+
+
 @pytest.mark.parametrize(
     ("error", "expected_status", "expected_code", "expected_message"),
     [
@@ -381,3 +484,6 @@ def test_story_endpoints_are_present_in_openapi(api_client: TestClient) -> None:
         "application/json"
     ]["schema"]["$ref"].endswith("/StoryListResponse")
     assert paths["/api/stories/{public_id}"]["get"]["responses"]["404"]
+    assert paths["/api/stories/{public_id}/state"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]["$ref"].endswith("/StoryStateResponse")

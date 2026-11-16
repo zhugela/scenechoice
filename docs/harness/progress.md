@@ -9,13 +9,95 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-15：121 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-16：141 passed）
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
-- 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）
+- 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 5 批代码已实现并验证，等待本人 review
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 010
+
+- 日期：2026-11-16
+- 本轮目标（一句话）：按 `PLAN.md` 修存档状态无法恢复的 P1，以及 endings 回读丢失合法数组顺序的 P2；不处理其余 P2/P3。
+- 基线：`.venv/Scripts/python.exe -m pytest -q` → `137 passed, 1 warning`。全局临时目录的 pytest 清理仍有无权访问链接，使用仓库内 `--basetemp` 取得有效退出码；没有改测试预期来绕过环境问题。
+- 改了哪几个文件、每处为什么这么改：
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/schemas/stories.py` | 新增动态状态、指标状态、剧集状态、变化记录和响应契约 | 静态蓝图与玩法进度职责分开；状态响应只公开当前进度需要的字段 |
+| `app/services/story_store.py` | 新增 `load_story_state`；保存 endings 时写入数组下标 `position` | 动态状态按 `public_id` 单独读取；SQL 行没有天然顺序，必须显式保存数组位置 |
+| `app/api/stories.py` | 新增 `GET /api/stories/{public_id}/state`，支持 `change_limit=1..100`，默认返回最近 20 条变化 | 采用 PLAN 推荐方案 A：详情继续返回静态蓝图，状态端点用于恢复和后续轮询 |
+| `app/models/ending.py` | 新增 `position` 列及非负约束，解释 position 与 priority 的不同用途 | `priority` 是结局判定顺序，不保证数组升序；两者不能混用 |
+| `app/models/story.py` | endings 关系改按 `(position, priority)` 排序 | 新数据按保存下标恢复；老数据 position=0 时仍按 priority 兜底 |
+| `alembic/versions/20261116_0002_add_ending_position.py`（新增） | 在旧表上补 `position`，服务端默认 0；未修改已发布的 `20261115_0001` | SQLite 旧数据必须有可用的非空默认值；batch 模式保证列和 CHECK 可升级 |
+| `tests/test_stories_api.py` | 新增状态恢复/404/OpenAPI 测试与乱序 priority 往返测试 | 钉住 `current_value=7`、剧集非初始状态、变化顺序及 `[2,1,3]` 数组顺序 |
+| `tests/test_migrations.py`（新增） | 先用真实 Alembic 建到旧版本、插入已有结局，再升级 head | 证明迁移不只对空库可用；旧行升级后 position=0，并可优先按 priority 回退 |
+| `docs/harness/progress.md`、`docs/harness/feature_list.json` | 记录本轮验证事实与 M2 第 5 批完成状态 | 跨会话状态必须与真实测试和迁移结果一致 |
+
+- P1 实测证据：测试中先通过 `POST /api/stories` 创建故事，再直接修改库中 `reputation.current_value=7`、第 1 集状态为 `completed`、故事状态为 `in_progress`，追加 sequence 2；调用状态接口后读回 7、completed、in_progress、last_sequence=2，最近变化为 `[2,1]`。静态蓝图接口仍返回 `initial_value=50`。
+- 状态枚举事实：PLAN 示例写的是 `episode.status='played'`，当前真实模型和数据库 CHECK 只允许 `planned/in_progress/completed`。本轮没有放宽约束或伪造 `played`，用合法的 `completed` 验证非初始状态可读回。
+- endings 证据：同一 blueprint 的 endings priority 为 `[2,1,3]`，保存后重新加载 `model_dump()` 完全相等，id 顺序保持 `comeback/quit/survive`。
+- 迁移证据：临时库从 `20261115_0001` 升级到 `20261116_0002`，升级前已有 3 条 endings；升级后 revision=`20261116_0002`，三行 position 均为 0，按 `(position, priority)` 顺序为 `quit/comeback/survive`。项目 `scenechoice.db` 也从 `20261115_0001` 成功升级。
+- 跑过的验证和结果（真实数字）：
+  - P1 红：`3 failed, 136 passed`（接口和 OpenAPI 尚不存在）
+  - P1 绿：`139 passed, 1 warning`
+  - endings 红：`1 failed, 139 passed`（旧关系按 priority 重排）
+  - 模型修正后：`1 failed, 140 passed`（只剩迁移尚未创建）
+  - 全量：`.venv/Scripts/python.exe -m pytest -q --basetemp .pytest-tmp/migration-green` → `141 passed, 1 warning in 4.65s`
+  - `.venv/Scripts/python.exe -m compileall -q app tests` → 通过
+  - `.venv/Scripts/python.exe -m alembic upgrade head` → `20261115_0001 -> 20261116_0002` 成功
+  - `.venv/Scripts/python.exe -m alembic check` → `No new upgrade operations detected.`
+- 约束遵守情况：
+  - 未改 M1 preview、既有测试预期、已发布的 `20261115_0001` 迁移或其他 P2/P3。
+  - 未执行 `git add` / `git commit` / `git push`。
+  - M1 阶段门与 `sc-m1-03` 个人掌握验收未改变。
+- 已知遗留风险：
+  - 状态接口没有鉴权；`public_id` 仍是恢复凭据，M3 玩家界面前需决定能力链接或归属校验。
+  - 最近变化默认 20 条，可调 1..100；没有完整历史分页。
+  - 迁移保留数据库级 position 默认 0，模型也默认 0；新建故事会显式写真实下标。
+- 下一步最佳动作：本人 review 状态接口、endings 顺序和两份新增/更新测试后决定是否提交；之后按下一批处理评审剩余 P2。
+
+### Session 009
+
+- 日期：2026-11-16
+- 本轮目标（一句话）：按 `PLAN.md` 完成 M2 第 2 批 Repository、存档/恢复 API、事务回滚和往返测试。`PLAN.md` 写的 Session 007 早于现有 Session 008，这里按真实时间顺延。
+- 基线：`.venv/Scripts/python.exe -m pytest -q` → `121 passed, 1 warning in 2.39s`。第一次直接运行在测试结束后清理全局 `%TEMP%` 的无权访问链接时退出；用例本身全部执行完，改用仓库内临时目录后取得有效退出码。`check.ps1` 的旧仓库根定位 bug 仍存在，本轮按标准命令直接验证。
+- 改了哪几个文件、每处为什么这么改：
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/db.py`（新增） | 提供 engine、`SessionLocal`、请求 session provider；SQLite 每个连接执行 `PRAGMA foreign_keys=ON`；引擎构造提成 `create_db_engine()` 便于验证 | 不让每个端点重复造引擎，并确保 ORM 声明的级联删除在 SQLite 真正生效 |
+| `app/dependencies.py` | 新增 `get_db_session` 包装 | FastAPI 的会话生命周期从持久化工厂隔离，测试可覆盖依赖 |
+| `app/services/story_store.py`（新增） | 集中完成 `StoryBlueprint` 与 ORM 聚合树双向转换；`save_blueprint` 单事务写整棵树并追加一条 `story_created`；`load_blueprint` 逐字段恢复；新增摘要分页查询 | 转换只留一处，API 不碰 Pydantic/ORM 映射；保存中途失败整棵故事回滚 |
+| `app/schemas/stories.py`（新增） | 新增创建、摘要、详情、列表响应契约 | 生成态 Schema 保持原样，持久化 API 的公开契约独立演进 |
+| `app/api/stories.py`（新增） | 新增 `POST /api/stories`、`GET /api/stories`、`GET /api/stories/{public_id}`；沿用 M1 的上游错误语义；不存在返回 404/40401 | 完成生成后落库、按公开 UUID 恢复和只返回摘要的分页列表 |
+| `app/main.py` | 挂载 stories router | 新端点可被实际应用访问 |
+| `tests/test_stories_api.py`（新增） | 16 条测试覆盖 SQLite 外键、整树往返、真实行数、事务中途失败回滚、重复保存、非法子实体、3 个 API、分页、404、错误映射和 OpenAPI | 把计划要求的正常路径与失败路径都变成可重复证据 |
+| `docs/harness/progress.md` | 本段记录与最新测试数字 | 跨会话状态必须与验证事实一致 |
+
+- 往返逐字段证据：`restored.model_dump() == blueprint.model_dump()` 通过；另外显式核对了标题/简介/类型/主题/集数、2 个角色、2 个指标、3 集及每集 2 个选择、3 个结局，以及 `character_ids`、`effects`、`conditions` 的跨模型键恢复。
+- 落库行数证据：保存一个 3 集故事后，`stories=1, characters=2, metrics=2, episodes=3, choices=6, endings=3, story_state_changes=1`。
+- 事务回滚证据：通过 SQLAlchemy `after_flush_postexec` 在完整故事树已执行插入后强制抛错；新会话逐表计数，7 张业务表全部为 0。
+- 重复保存策略：同一个 blueprint 保存两次创建两个不同 `public_id` 的独立 story，子实体和 `story_created` 记录各写一份。理由：本批没有显式“覆盖已有存档”的版本语义；默认覆盖会静默销毁历史，默认冲突又无法从无身份蓝图判断是否为同一用户意图。生成动作每次产生新存档语义最清楚。
+- 跑过的验证和结果（真实数字）：
+  - 新增测试单跑：`16 passed, 1 warning in 0.90s`
+  - 全量回归：`137 passed, 1 warning in 2.90s`
+  - `.venv/Scripts/python.exe -m compileall -q app tests` → 通过
+  - `git diff --check` → 无空白错误（仅 Windows 换行提示）
+- 约束遵守情况：
+  - 未改 `app/api/story_plans.py`、`app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`。
+  - 未改任何已有测试预期；只新增 `tests/test_stories_api.py`。
+  - 测试使用内存 SQLite，不污染 `scenechoice.db`。
+  - 未执行 `git add` / `git commit` / `git push`。
+  - 未推进 `sc-m1-03`，M1 阶段门仍 blocked。
+- 已知遗留风险：
+  - 外部传入的非法蓝图会在写入前由 `BlueprintValidator` 拒绝；若数据库文件被手工篡改，恢复时可能因 JSON 形状不符直接报内部错误，本批没有损坏存档修复策略。
+  - 列表按 `created_at DESC, id DESC` 排序；本批只做 offset/limit，没有游标分页和并发快照保证。
+  - POST 是生成接口而不是幂等重放接口；客户端超时后重试可能留下两个独立存档。
+  - story store 的整树保存已测量为测试规模可用，尚无大批量/长期压力数据。
+- 下一步最佳动作：本人 review 新增数据层、API 与 16 条测试后决定是否提交；之后按第 3 批实现状态变化写入与玩家推进。
 
 ### Session 008
 

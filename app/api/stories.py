@@ -12,16 +12,27 @@ from app.models import Story
 from app.schemas.response import ApiResponse
 from app.schemas.stories import (
     CreateStoryRequest,
+    EpisodeState,
+    MetricState,
     StoryCreatedData,
     StoryCreatedResponse,
     StoryDetailData,
     StoryDetailResponse,
     StoryListData,
     StoryListResponse,
+    StoryStateChangeData,
+    StoryStateData,
+    StoryStateResponse,
     StorySummary,
 )
 from app.services.story_planner import StoryPlanner, StoryPlanningError
-from app.services.story_store import BlueprintStorageError, list_stories, load_blueprint, save_blueprint
+from app.services.story_store import (
+    BlueprintStorageError,
+    list_stories,
+    load_blueprint,
+    load_story_state,
+    save_blueprint,
+)
 
 
 router = APIRouter(prefix="/api/stories", tags=["stories"])
@@ -151,6 +162,52 @@ def get_stories(
             total=total,
             offset=offset,
             limit=limit,
+        )
+    )
+
+
+@router.get(
+    "/{public_id}/state",
+    response_model=StoryStateResponse,
+    summary="Restore mutable story play progress",
+    responses={404: {"model": ApiResponse, "description": "Story not found"}},
+)
+def get_story_state(
+    public_id: str,
+    change_limit: int = Query(default=20, ge=1, le=100),
+    session: Session = Depends(get_db_session),
+) -> StoryStateResponse:
+    loaded = load_story_state(session, public_id, change_limit=change_limit)
+    if loaded is None:
+        raise AppError("story not found", code=40401, status_code=404)
+
+    story, recent_changes = loaded
+    return StoryStateResponse(
+        data=StoryStateData(
+            public_id=story.public_id,
+            status=story.status,
+            metrics=[
+                MetricState(metric_id=metric.key, current_value=metric.current_value)
+                for metric in story.metrics
+            ],
+            episodes=[
+                EpisodeState(number=episode.number, status=episode.status)
+                for episode in story.episodes
+            ],
+            last_sequence=recent_changes[0].sequence if recent_changes else 0,
+            recent_state_changes=[
+                StoryStateChangeData(
+                    sequence=change.sequence,
+                    entity_type=change.entity_type,
+                    entity_key=change.entity_key,
+                    event_type=change.event_type,
+                    before_state=change.before_state,
+                    after_state=change.after_state,
+                    source=change.source,
+                    occurred_at=change.occurred_at,
+                )
+                for change in recent_changes
+            ],
         )
     )
 

@@ -113,6 +113,7 @@ def _story_from_blueprint(blueprint: StoryBlueprint) -> Story:
     story.endings = [
         Ending(
             key=ending.id,
+            position=position,
             priority=ending.priority,
             title=ending.title,
             summary=ending.summary,
@@ -126,7 +127,7 @@ def _story_from_blueprint(blueprint: StoryBlueprint) -> Story:
                 for condition in ending.conditions
             ],
         )
-        for ending in blueprint.endings
+        for position, ending in enumerate(blueprint.endings)
     ]
     return story
 
@@ -260,6 +261,36 @@ def load_blueprint(session: Session, public_id: str) -> StoryBlueprint | None:
             for ending in story.endings
         ],
     )
+
+
+def load_story_state(
+    session: Session,
+    public_id: str,
+    *,
+    change_limit: int,
+) -> tuple[Story, list[StoryStateChange]] | None:
+    """Load mutable play progress separately from the immutable blueprint."""
+    statement = (
+        select(Story)
+        .where(Story.public_id == public_id)
+        .options(
+            selectinload(Story.metrics),
+            selectinload(Story.episodes),
+        )
+    )
+    story = session.scalar(statement)
+    if story is None:
+        return None
+
+    recent_changes = list(
+        session.scalars(
+            select(StoryStateChange)
+            .where(StoryStateChange.story_id == story.id)
+            .order_by(StoryStateChange.sequence.desc())
+            .limit(change_limit)
+        )
+    )
+    return story, recent_changes
 
 
 def list_stories(session: Session, *, offset: int, limit: int) -> tuple[list[Story], int]:
