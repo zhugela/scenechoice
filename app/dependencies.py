@@ -1,7 +1,17 @@
+from collections.abc import Generator
+
+from sqlalchemy.orm import Session
+
 from app.clients.deepseek import DeepSeekClient
 from app.config import get_settings
+from app.db import get_session
 from app.errors import AppError
 from app.services.story_planner import StoryPlanner
+
+
+def get_db_session() -> Generator[Session, None, None]:
+    """FastAPI dependency wrapper kept separate from the DB factory."""
+    yield from get_session()
 
 
 def get_story_planner() -> StoryPlanner:

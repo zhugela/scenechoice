@@ -1,69 +1,72 @@
-# PLAN — M2 第 1 批：领域模型 + ORM + 迁移骨架
+# PLAN — M2 第 2 批：Repository + 存档/恢复 API
 
-## 本批范围（只做这些，别的都不许碰）
+## 本批范围
 
-只做**数据层骨架**：领域模型设计 + SQLAlchemy 2.0 模型 + Alembic 首次迁移。
+把已经校验通过的 blueprint **存进库**、按 id **恢复出来**。
 
-**不做**：Repository/DAO、API 接口、存档恢复逻辑、业务事务、测试（这些是第 2、3 批）。
+**做**：Repository 层 + 领域转换 + 3 个 API 端点 + 往返测试
+**不做**：状态变化记录逻辑（第 3 批）、玩家交互/剧情推进（M3）、并发控制
 
-## M2 总目标（背景，供设计时参考）
+## 现状（第 1 批已完成，先读再动手）
 
-按 `docs/plans/2026-11-06-scenechoice-competitor-capability-adoption.md`：
-- 本阶段实现 6 个领域实体：**Story、Character、Episode、Choice、Metric、Ending**
-- 要有可恢复的故事存档
-- 吸收点：① 世界事实与自然语言叙述分离 ② SQLite 迁移 + 事务边界 + 状态变化记录 ③ 存档/恢复体验
+已提交 `77df366`。已有：
+- `app/models/`：Story / Character / Episode / Choice / Metric / Ending / StateChange（SQLAlchemy 2.0，`Mapped[...]` 风格）
+- `alembic/versions/20261115_0001_initial_domain.py`，已实测建库成功（7 张业务表）
+- `app/config.py` 有 `SCENECHOICE_DATABASE_URL`（默认 `sqlite:///./scenechoice.db`）
+- `app/schemas/story_blueprint.py` 的 `StoryBlueprint` = **生成态**（LLM 产出 + 校验通过）
+- M1 的 `POST /api/story-plans/preview` 是**纯预览不落库**，本批不许改它的行为
 
-## 技术选型（已定，别换）
+## 关键设计点
 
-- **SQLite**（文档明确要求，M2 阶段不引 Postgres）
-- **SQLAlchemy 2.0** 声明式（`Mapped[...]` / `mapped_column`，不用旧式 `Column`）
-- **Alembic** 做迁移
-- Python 3.12，用 `.venv/Scripts/python.exe`
+1. **生成态 → 持久化态的转换要收敛在一处**
+   写 `app/services/story_store.py`（或 `app/repositories/`），负责
+   `StoryBlueprint → ORM 模型树` 与 `ORM 模型树 → StoryBlueprint`（往返）。
+   **不许在 API 层散落转换代码**，也不许把 Pydantic 对象直接塞进 ORM。
 
-## 关键设计约束（本批最需要想清楚的部分）
+2. **事务边界**
+   保存一个 story = 1 个事务，包含 story 本体 + 全部 characters/episodes/choices/metrics/endings。
+   中途任何一步失败 → **整体回滚**，库里不许留半截故事。用 `Session.begin()` 或显式 commit/rollback。
 
-1. **生成态 ≠ 持久化态**
-   现有 `app/schemas/story_blueprint.py` 的 `StoryBlueprint` 是"LLM 生成 + 校验通过"的产物，字段为校验服务。
-   M2 的 SQL 模型为**长期存储 + 可恢复**服务。**不要直接把 Pydantic schema 当 ORM 模型**，要在注释里写清两者映射关系与差异理由。
+3. **会话管理**
+   SQLAlchemy 2.0 风格：`sessionmaker` / `Session`，通过 FastAPI 依赖注入（`app/dependencies.py` 加 provider），
+   不要每次自己 `create_engine`。
 
-2. **世界事实与叙述分离**（吸收点①）
-   模型要能区分"已决定的事实"（metric 数值、ending 条件、choice 的 effect）和"叙述文本"（标题、描述、台词）。明确哪层可变、哪层生成后不可变。
+4. **幂等与重复保存**
+   同一个 blueprint 存两次怎么处理？给出选择并说明理由（新建一条新 story / 按 public_id 覆盖 / 报冲突）。
 
-3. **状态变化可追溯**（吸收点②）
-   至少设计出"故事/剧集状态变化"的记录载体（history/audit 表，或不可变事实 + 投影）。**本批只建表结构，不写记录逻辑。**
-
-4. **ID 策略**
-   现有 blueprint 用字符串 id（如 character_ids）。持久化层要考虑：自增整数 PK + 业务字符串 id 双键？还是纯 UUID？**给出理由。**
-
-5. **不破坏 M1**
-   现有 121 条测试必须继续全绿。不许改 `app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`、`app/api/story_plans.py`。
+5. **不许破坏 M1**
+   现有 **121 条测试**必须继续全绿；`preview` 接口行为一个字都不许改。
 
 ## 子任务队列
 
 - [ ] 基线：`.venv/Scripts/python.exe -m pytest -q` 确认 **121 passed**
-- [ ] 读 `app/schemas/story_blueprint.py`，列出全部字段与语义
-- [ ] 新建 `app/models/` 包，写 SQLAlchemy 2.0 模型：Story / Character / Episode / Choice / Metric / Ending
-- [ ] 补一张状态变化记录表（命名自定），**只建结构不写逻辑**
-- [ ] 建立实体关系（外键 + 级联策略，说明为什么这样设）
-- [ ] `requirements.txt` 加 sqlalchemy / alembic（锁版本）
-- [ ] `alembic init alembic`，配置 `alembic.ini` 与 `env.py` 指向项目配置里的 DB URL
-- [ ] 生成第一个迁移（建全部表），**实际执行** `alembic upgrade head` 验证能建库
-- [ ] 用 SQLite 实测：迁移后能查到 7 张表（6 实体 + 1 记录表）
-- [ ] 跑 `.venv/Scripts/python.exe -m pytest -q` 确认仍是 **121 passed**
-- [ ] 输出设计说明：字段与语义、实体关系（文字版）、ID 策略理由、生成态/持久化态映射差异、遗留问题
+- [ ] 读 `app/models/*.py` 全部字段，以及 `app/schemas/story_blueprint.py` 的字段语义
+- [ ] 写 `app/db.py`（engine + sessionmaker + get_session 依赖），从 `app/config.py` 读 URL
+- [ ] 写 `app/services/story_store.py`：`save_blueprint(session, blueprint) -> Story` 与 `load_blueprint(session, public_id) -> StoryBlueprint | None`
+- [ ] 写 `app/api/stories.py` 三个端点（挂到 main）：
+  - `POST /api/stories`：入参 `{inspiration, episode_count}` → 生成 + 校验 + 落库，返回 `{public_id, ...}`
+  - `GET /api/stories/{public_id}`：恢复出完整 blueprint
+  - `GET /api/stories`：列表（分页，只返回摘要字段，不返回全部子实体）
+- [ ] 测试（新建 `tests/test_stories_api.py`）：
+  - 保存 → 恢复 → **逐字段比对**（往返一致）
+  - 事务回滚：模拟中途失败（如塞一个非法子实体）→ 库里查不到半截 story
+  - 重复保存的行为（按你上面选定的策略断言）
+  - 404：查不存在的 public_id
+- [ ] 跑全量测试，把真实结果写进 `docs/harness/progress.md`（新开 Session 007）
+- [ ] 输出：3 个端点的请求/响应示例、事务回滚怎么验证的、重复保存策略与理由、新增几条测试、遗留问题
 
 ## 边界
 
-- 不许写 Repository / Service / API 层代码
-- 不许改 M1 任何业务文件
+- 不许改 `app/api/story_plans.py`、`app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`
+- 不许写状态变化记录逻辑（但保存时**可以**写一条 `story_state_changes` 的 created 记录，这是最小必要）
 - 不许 git add / commit / push
-- DB 路径走配置（`app/config.py` 加 `SCENECHOICE_DATABASE_URL`，默认 `sqlite:///./scenechoice.db`），不许硬编码
-- `.gitignore` 补 `*.db`
+- 不许引 Postgres / 异步驱动（M2 用 SQLite 同步）
+- 测试用**内存 SQLite**（`sqlite:///:memory:`）或临时文件，不许污染 `scenechoice.db`
 
 ## 验收（自己验证并把结果写进输出）
 
-1. `alembic upgrade head` 真跑通（贴输出）
-2. 查出 7 张表（贴输出）
-3. `pytest -q` 仍 121 passed（贴输出）
-4. 六个实体 + 1 张记录表的**字段清单**（表格）
-5. ID 策略与生成态/持久化态映射的**理由**（不能只写"这样方便"）
+1. `pytest -q` 真实数字（基线 121 + 新增）
+2. `POST /api/stories` 真的落库（保存后查表能看到 story + 子实体行数）
+3. `GET /api/stories/{id}` 恢复出的 blueprint 与原始**逐字段相等**（写出你比对了哪些字段）
+4. 事务回滚实测（贴出"失败后库里 0 行"的证据）
+5. 121 条 M1 测试仍然全绿
