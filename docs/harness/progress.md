@@ -13,8 +13,61 @@
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
+- M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 008
+
+- 日期：2026-11-15
+- 本轮目标（一句话）：按 `PLAN.md` 落 M2 第 1 批的数据层骨架——六个领域实体 + 状态变化表 + Alembic 首次迁移，不碰 Repository/Service/API。
+- 基线：`.venv/Scripts/python.exe -m pytest -q` → `121 passed, 1 warning in 3.20s`
+- 改了哪几个文件、每处为什么这么改：
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/config.py` | 新增 `database_url`（`SCENECHOICE_DATABASE_URL`，默认 `sqlite:///./scenechoice.db`） | 迁移与应用必须共用同一个连接串来源；硬编码 URL 会让 env、测试、部署三处各说各话 |
+| `app/models/base.py`（新增） | `Base`、约束命名规范、UTC 时间函数 | 持久化层的根；命名规范让 SQLite batch 迁移能稳定引用约束；时间统一 UTC |
+| `app/models/enums.py`（新增） | 故事/剧集状态、结局类别、状态变化来源与事件词汇 | 值存字符串 + CHECK（SQLite 无原生 enum）；把词汇集中一处，服务层不再抄字面量 |
+| `app/models/story.py`、`character.py`、`metric.py`、`episode.py`、`choice.py`、`ending.py`（新增） | 六张实体表：内部自增 PK + 业务键、外键与级联、CHECK、JSON 列 | 生成态的 Pydantic 模型没有身份、当前状态和时间线，不能直接当 ORM；字段映射差异写在 `app/models/__init__.py` |
+| `app/models/state_change.py`（新增） | 追加式状态变化表，`(story_id, sequence)` 唯一 | 吸收点②的载体；本批只建结构，写入器留到第 3 批 |
+| `app/models/__init__.py`（新增） | 生成态→持久化态映射、ID 策略、级联边界、运维注意事项 | 设计理由必须和模型放在一起，避免下一批靠猜 |
+| `requirements.txt` | 加 `sqlalchemy>=2.1,<2.2`、`alembic>=1.20,<2.0`（按本轮实际验证的 2.1.8 / 1.20.1 对齐） | 依赖要可复现；上一轮暂写的 `<2.1` 与本机实际版本不符，验证后按真实版本收紧 |
+| `alembic.ini`、`alembic/env.py`、`alembic/script.py.mako`（新增） | Alembic 入口；URL 从 `Settings` 读；SQLite 打开 batch 模式 | 迁移入口只能有一个 DB URL 来源；SQLite 后续 ALTER 需要 batch |
+| `alembic/versions/20261115_0001_initial_domain.py`（新增） | 建 7 张表 + 索引/唯一/CHECK/外键 | 初始骨架，字段与模型逐列对齐 |
+| `.gitignore` | 忽略 `*.db` 及 journal/wal/shm | 本地存档不入仓 |
+| `docs/harness/progress.md` | 本段记录 | 跨会话状态层 |
+
+- 职责边界说明（为什么不能只改一层）：
+  - `app/schemas/` 继续只负责"模型生成的形状"，`app/services/blueprint_validator.py` 继续只负责跨字段业务规则。新 ORM 层不复制十条规则，只保留数据库能局部保证的不变量（外键、唯一、`0..100`、`1..5`、状态取值）。理由：M1 反复修的就是"同一规则写两处会跑偏"。
+  - 持久化层新增的是"活下来"所需的东西：代理键、`public_id`、状态、时间戳、`current_value`、状态变化表。生成态没有身份和当前状态，故不能直接当 ORM。
+  - API/Service/Repository 本批一律不写；引擎/会话也留到第 2 批，避免本批顺手做出事务语义。
+- 跑过的验证和结果（真实数字）：
+  - 全量：`.venv/Scripts/python.exe -m pytest -q` → `121 passed, 1 warning in 2.53s`（补跑运行时验证后复跑）
+  - 新增 Python 文件字节编译：12 个文件（模型包 + Alembic 入口 + 迁移）无语法错误
+  - 静态一致性：模型 `__tablename__` 与迁移 `create_table` 同为 7 张表；66 列的类型与可空性逐列一致；唯一约束 0 差异、CHECK 0 差异、外键目标与 `ON DELETE CASCADE` 语义一致
+  - 依赖版本：SQLAlchemy 2.1.8、Alembic 1.20.1（负责人批准后已装进 `.venv`）
+  - 从零迁移（临时 SQLite，跑完即删）：
+    `INFO  [alembic.runtime.migration] Running upgrade  -> 20261115_0001, M2 batch 1: six domain entities plus the state-change log.`
+    迁移后 `alembic_version` = `20261115_0001`；业务表 7 张：`characters, choices, endings, episodes, metrics, stories, story_state_changes`（另有 1 张 `alembic_version` 记账表）。
+  - 模型/迁移一致性：`alembic check` → `No new upgrade operations detected.`（项目库与临时新库各跑一次，均为无差异）
+  - 项目根 `scenechoice.db` 已由 `alembic upgrade head` 实际创建（`.gitignore` 已覆盖）。
+  - 命令入口说明：本会话的 Bash 允许列表没有 `python -m alembic`，运行时改用同一入口 `alembic.config.main(argv=["upgrade", "head"])` / `main(argv=["check"])` 在已批准的 Python 通道执行；行为与 CLI 等价。
+- 约束遵守情况：
+  - 未改 `app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`、`app/api/story_plans.py`。
+  - 未写 Repository/Service/API/事务/存档恢复逻辑；未新增测试（PLAN 明确把测试放到第 2、3 批）。
+  - 未执行 `git add` / `git commit` / `git push`。
+  - 本批按负责人本轮明确指令启动 M2；`sc-m1-04` 阶段门仍 blocked，状态未改。
+- 已知遗留风险：
+  - JSON 里的 `metric_key` / `character_keys` 没有数据库级外键；导入层必须校验，否则会把悬空引用写进存档。
+  - SQLite 默认每个连接关闭外键；第 2 批的引擎必须 `PRAGMA foreign_keys=ON`，否则声明了 `ON DELETE CASCADE` 也不会级联。
+  - `sqlite:///./scenechoice.db` 相对进程工作目录；从别处启动会把库建到别处。
+  - SQLite 读回的时间是 naive；写入统一 UTC，读取方必须按 UTC 解释。
+  - 状态变化表没有写入器、没有事务边界；本批只是结构。
+  - `docs/ARCHITECTURE.md` 的"M2 未开始"和 `docs/generated/db-schema.md` 的"M1 无数据库"已过时；运行时验证已通过，可在下一次改文档时更新（本批范围不含这两份）。
+  - requirements 仍是版本区间（`sqlalchemy>=2.1,<2.2`、`alembic>=1.20,<2.0`），不是精确补丁号锁定；本轮验证的是 2.1.8 / 1.20.1。
+  - 本轮没有在 SQLAlchemy 2.0.x 上验证；如果将来降回 2.0 系列，需要重跑 `alembic check`。
+- 下一步最佳动作：本人 review 本轮数据层与迁移后决定是否提交；之后进入第 2 批（engine/session 工厂、`PRAGMA foreign_keys=ON`、Repository），并按 PLAN 补第 2 批测试。M1 阶段门仍卡 `sc-m1-03`，本批未推进。
 
 ### Session 007
 

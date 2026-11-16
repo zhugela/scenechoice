@@ -22,6 +22,12 @@ env/
 .DS_Store
 Thumbs.db
 
+# 本地数据库（迁移生成的存档绝不入仓）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # 评测输出（原始结果按需单独提交）
 evals/output/
 evals/reports/

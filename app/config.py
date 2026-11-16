@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     app_name: str = "SceneChoice"
     app_env: str = "development"
     debug: bool = False
+    # Persistence is introduced in M2. The default is a file next to the
+    # process working directory; deployments should set
+    # SCENECHOICE_DATABASE_URL to an absolute path (see docs/ARCHITECTURE.md).
+    database_url: str = Field(default="sqlite:///./scenechoice.db", min_length=1)
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"

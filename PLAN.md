@@ -1,36 +1,69 @@
-# PLAN
+# PLAN — M2 第 1 批：领域模型 + ORM + 迁移骨架
 
-目标：把「哪些上游状态码算可重试」这份知识，从两处重复收敛成单一事实来源。
+## 本批范围（只做这些，别的都不许碰）
 
-## 要解决的问题（架构层，不是补功能）
+只做**数据层骨架**：领域模型设计 + SQLAlchemy 2.0 模型 + Alembic 首次迁移。
 
-同一份知识现在写在两个地方，而且必须手工保持同步：
+**不做**：Repository/DAO、API 接口、存档恢复逻辑、业务事务、测试（这些是第 2、3 批）。
 
-| 位置 | 内容 |
-|---|---|
-| `app/api/story_plans.py:47` 附近 | 4xx 分支里排除 `{408, 429}` |
-| `app/clients/deepseek.py:92` | `retryable = status_code in {408, 429} or status_code >= 500` |
+## M2 总目标（背景，供设计时参考）
 
-**风险**：将来要支持 425（Too Early）或 409 之类，改了一处忘了另一处，就会出现
-「客户端层认为可重试、API 层却报 400 请求错误」的错位 —— 排查起来极难，因为两层各自都"看着对"。
+按 `docs/plans/2026-11-06-scenechoice-competitor-capability-adoption.md`：
+- 本阶段实现 6 个领域实体：**Story、Character、Episode、Choice、Metric、Ending**
+- 要有可恢复的故事存档
+- 吸收点：① 世界事实与自然语言叙述分离 ② SQLite 迁移 + 事务边界 + 状态变化记录 ③ 存档/恢复体验
 
-## 做法要求
+## 技术选型（已定，别换）
 
-1. **先读懂两处的职责**：客户端层决定「要不要再试一次」，API 层决定「给调用方什么状态码和业务码」。它们是两个不同的问题，**不要为了消除重复把两层的职责混成一个函数**。
-2. 把「哪些状态码可重试」抽成**单一事实来源**（一个常量集合或一个纯函数），放在合适的位置（自己判断该放 `app/clients/` 还是共享模块，说明理由）。
-3. 两处都改为引用它。**行为不许变** —— 这是纯重构，401/403/402/408/429/5xx/200 的输出必须和现在一模一样。
-4. 补一条测试：断言「客户端判定 retryable 的状态码集合」与「API 层当作临时错误的集合」**完全一致且来自同一来源**（假如将来有人只改一处，这条测试要能红）。
-5. 如果发现两层对某个状态码的判断本来就该不同（比如 402 不该重试但也不该报 400），在代码注释里写清为什么，不要强行统一。
+- **SQLite**（文档明确要求，M2 阶段不引 Postgres）
+- **SQLAlchemy 2.0** 声明式（`Mapped[...]` / `mapped_column`，不用旧式 `Column`）
+- **Alembic** 做迁移
+- Python 3.12，用 `.venv/Scripts/python.exe`
 
-## 约束
+## 关键设计约束（本批最需要想清楚的部分）
 
-1. 不许改已有测试的预期结果，只允许新增。
-2. 收工前 `.venv/Scripts/python.exe -m pytest -q` 必须全绿（基线 **120 passed**）。
-3. **不许 git add / git commit / git push**（权限层已拦，别试）。
-4. 允许改多个文件，但只改和这个重复有关的部分，别顺手重构异常体系。
+1. **生成态 ≠ 持久化态**
+   现有 `app/schemas/story_blueprint.py` 的 `StoryBlueprint` 是"LLM 生成 + 校验通过"的产物，字段为校验服务。
+   M2 的 SQL 模型为**长期存储 + 可恢复**服务。**不要直接把 Pydantic schema 当 ORM 模型**，要在注释里写清两者映射关系与差异理由。
 
-## 收工要输出
+2. **世界事实与叙述分离**（吸收点①）
+   模型要能区分"已决定的事实"（metric 数值、ending 条件、choice 的 effect）和"叙述文本"（标题、描述、台词）。明确哪层可变、哪层生成后不可变。
 
-- 改了哪几个文件、新的单一事实来源放在哪、为什么放那里
-- 怎么证明「行为没变」（用了什么测试或对照）
-- 你认为还剩的隐患
+3. **状态变化可追溯**（吸收点②）
+   至少设计出"故事/剧集状态变化"的记录载体（history/audit 表，或不可变事实 + 投影）。**本批只建表结构，不写记录逻辑。**
+
+4. **ID 策略**
+   现有 blueprint 用字符串 id（如 character_ids）。持久化层要考虑：自增整数 PK + 业务字符串 id 双键？还是纯 UUID？**给出理由。**
+
+5. **不破坏 M1**
+   现有 121 条测试必须继续全绿。不许改 `app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`、`app/api/story_plans.py`。
+
+## 子任务队列
+
+- [ ] 基线：`.venv/Scripts/python.exe -m pytest -q` 确认 **121 passed**
+- [ ] 读 `app/schemas/story_blueprint.py`，列出全部字段与语义
+- [ ] 新建 `app/models/` 包，写 SQLAlchemy 2.0 模型：Story / Character / Episode / Choice / Metric / Ending
+- [ ] 补一张状态变化记录表（命名自定），**只建结构不写逻辑**
+- [ ] 建立实体关系（外键 + 级联策略，说明为什么这样设）
+- [ ] `requirements.txt` 加 sqlalchemy / alembic（锁版本）
+- [ ] `alembic init alembic`，配置 `alembic.ini` 与 `env.py` 指向项目配置里的 DB URL
+- [ ] 生成第一个迁移（建全部表），**实际执行** `alembic upgrade head` 验证能建库
+- [ ] 用 SQLite 实测：迁移后能查到 7 张表（6 实体 + 1 记录表）
+- [ ] 跑 `.venv/Scripts/python.exe -m pytest -q` 确认仍是 **121 passed**
+- [ ] 输出设计说明：字段与语义、实体关系（文字版）、ID 策略理由、生成态/持久化态映射差异、遗留问题
+
+## 边界
+
+- 不许写 Repository / Service / API 层代码
+- 不许改 M1 任何业务文件
+- 不许 git add / commit / push
+- DB 路径走配置（`app/config.py` 加 `SCENECHOICE_DATABASE_URL`，默认 `sqlite:///./scenechoice.db`），不许硬编码
+- `.gitignore` 补 `*.db`
+
+## 验收（自己验证并把结果写进输出）
+
+1. `alembic upgrade head` 真跑通（贴输出）
+2. 查出 7 张表（贴输出）
+3. `pytest -q` 仍 121 passed（贴输出）
+4. 六个实体 + 1 张记录表的**字段清单**（表格）
+5. ID 策略与生成态/持久化态映射的**理由**（不能只写"这样方便"）
