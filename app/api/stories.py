@@ -1,11 +1,9 @@
 """Generate, persist, list, and restore story archives."""
 
-from typing import NoReturn
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.clients.deepseek import DeepSeekClientError, is_retryable_status
+from app.clients.deepseek import DeepSeekClientError
 from app.dependencies import get_db_session, get_story_planner
 from app.errors import AppError
 from app.models import Story
@@ -25,6 +23,11 @@ from app.schemas.stories import (
     StoryStateResponse,
     StorySummary,
 )
+from app.services.provider_errors import (
+    STORY_MODEL_502_DESCRIPTION,
+    STORY_MODEL_503_DESCRIPTION,
+    provider_error_to_app_error,
+)
 from app.services.story_planner import StoryPlanner, StoryPlanningError
 from app.services.story_store import (
     BlueprintStorageError,
@@ -36,55 +39,6 @@ from app.services.story_store import (
 
 
 router = APIRouter(prefix="/api/stories", tags=["stories"])
-
-
-def _raise_planning_error(exc: Exception) -> NoReturn:
-    """Use the same provider-error meanings as the M1 preview contract."""
-    if isinstance(exc, DeepSeekClientError):
-        if exc.status_code in {401, 403}:
-            raise AppError(
-                "story model credentials were rejected",
-                code=50302,
-                status_code=503,
-            )
-        if exc.status_code == 402:
-            raise AppError(
-                "story model account has insufficient balance",
-                code=50303,
-                status_code=503,
-            )
-        if exc.status_code == 200:
-            raise AppError(
-                "unable to create a valid story plan",
-                code=42201,
-                status_code=422,
-            )
-        if (
-            exc.status_code is not None
-            and 400 <= exc.status_code < 500
-            and not is_retryable_status(exc.status_code)
-        ):
-            raise AppError(
-                "story model rejected the request",
-                code=50202,
-                status_code=400,
-            )
-        if exc.status_code is not None and exc.status_code < 400:
-            raise AppError(
-                "story model returned an unexpected protocol status",
-                code=50204,
-                status_code=502,
-            )
-        raise AppError(
-            "story model is temporarily unavailable",
-            code=50201,
-            status_code=502,
-        )
-    raise AppError(
-        "unable to create a valid story plan",
-        code=42201,
-        status_code=422,
-    )
 
 
 def _summary(story: Story) -> StorySummary:
@@ -111,16 +65,11 @@ def _summary(story: Story) -> StorySummary:
         422: {"model": ApiResponse, "description": "Invalid request or generation failure"},
         502: {
             "model": ApiResponse,
-            "description": (
-                "Story model is unavailable (50201) or returned an unexpected protocol status (50204)"
-            ),
+            "description": STORY_MODEL_502_DESCRIPTION,
         },
         503: {
             "model": ApiResponse,
-            "description": (
-                "Story model is not configured (50301), credentials were rejected (50302), "
-                "or the account has insufficient balance (50303)"
-            ),
+            "description": STORY_MODEL_503_DESCRIPTION,
         },
     },
 )
@@ -131,8 +80,14 @@ async def create_story(
 ) -> StoryCreatedResponse:
     try:
         result = await planner.plan(request.inspiration, request.episode_count)
-    except (DeepSeekClientError, StoryPlanningError) as exc:
-        _raise_planning_error(exc)
+    except DeepSeekClientError as exc:
+        raise provider_error_to_app_error(exc) from exc
+    except StoryPlanningError as exc:
+        raise AppError(
+            "unable to create a valid story plan",
+            code=42201,
+            status_code=422,
+        ) from exc
 
     try:
         story = save_blueprint(session, result.blueprint)
