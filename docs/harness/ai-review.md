@@ -37,7 +37,11 @@ gh variable set DEEPSEEK_MODEL    --body "deepseek-chat"
 - 测试默认不联网；新增外部调用必须有 mock 的失败路径。
 - 改 ORM 必须配 Alembic 迁移，反之亦然。
 
-评论固定四个小节：结论 / 阻塞问题 / 非阻塞建议 / 缺失的测试。每条都要带 `path:line`。
+评论固定四个小节：结论 / 阻塞问题 / 非阻塞建议 / 缺失的测试。
+
+定位按 `path:函数名`。只给 diff 时模型没法看上下文，会退化成一堆「无法确认」；所以脚本会把
+**改动文件的完整内容**（`.py`/`.yml` 等，单文件 <8k、合计 <40k 字符）一起送过去。超长文件直接跳过，
+不拿截断的半个文件骗它。
 
 ## 故意不做的事
 
@@ -47,7 +51,7 @@ gh variable set DEEPSEEK_MODEL    --body "deepseek-chat"
 
 ## 成本
 
-每次 PR 更新一次调用，输入最多 6 万字符 diff（约 2 万 token）。切到 `synchronize` 事件意味着每 push 一次就调一次；想省钱就把 workflow 里的 `synchronize` 去掉，只在开 PR 时审一次。
+每次 PR 更新一次调用：最多 6 万字符 diff，加最多 4 万字符文件全文。切到 `synchronize` 事件意味着每 push 一次就调一次；想省钱就把 workflow 里的 `synchronize` 去掉，只在开 PR 时审一次。
 
 ## 本地试跑
 

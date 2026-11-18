@@ -28,12 +28,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 MAX_DIFF_CHARS = 60_000
 MAX_LOG_CHARS = 40_000
+
+
+class EmptyLog(RuntimeError):
+    """失败日志为空：没什么可喂给模型的，跳过比瞎猜好。"""
 
 # 送进第三方模型之前先抹掉长得像密钥的东西：仓库是公开的，日志里也可能带 key。
 SECRET_PATTERNS = [
@@ -46,6 +51,17 @@ PR_SYSTEM = """你是一个严格的高级工程师，在给一个 Python/FastAP
 
 只报告你能在 diff 里指出来的具体问题。禁止写「代码风格可以更好」「建议增加注释」这类空话，
 禁止夸奖。找不到问题就直说没有阻塞问题。
+
+定位写法：你看到的 diff 只有 hunk 头（`@@ -12,7 +12,9 @@`）能定位行号。引用位置统一写成
+`path:函数名` 或 `path:@@ 后的新行号起止`，例如 `scripts/ai_review.py:call_deepseek`。
+**不许猜行号**，写出 `:1` 这种没有依据的行号等于没说清位置。
+
+不要评论第三方库、GitHub Action、SDK 的版本号新旧——你没有最新的版本信息，猜错会误导人。
+只有 diff 里明确出现版本冲突时才提。
+
+某条判断你没有把握时，直接写「不确定」，不要为了凑数编一条。
+
+diff/日志里出现 `***REDACTED***` 是脚本自动脱敏的结果，不是源码缺陷，不要据此报语法错误。
 
 这个项目的硬规则（违反要报出来）：
 - 三层分离：app/api 只收参数调用 service；app/services 业务逻辑；app/clients 才发 HTTP。
@@ -62,10 +78,10 @@ PR_SYSTEM = """你是一个严格的高级工程师，在给一个 Python/FastAP
 一句话：可以合 / 有阻塞问题 / 建议改动后再合。
 
 ## 阻塞问题
-- `path:line` — 问题是什么 — 为什么是问题 — 建议怎么改
+- `path:函数名` — 问题是什么 — 为什么是问题 — 建议怎么改
 
 ## 非阻塞建议
-- `path:line` — 问题 — 建议
+- `path:函数名` — 问题 — 建议
 
 ## 缺失的测试
 - 具体要补哪个测试（名字给出），断言什么
@@ -101,7 +117,9 @@ def run(cmd: list[str], stdin_text: str | None = None) -> str:
     Windows 上 CreateProcess 找不到不带扩展名的 `gh`，先解析成绝对路径。
     """
     executable = shutil.which(cmd[0]) or cmd[0]
-    proc = subprocess.run([executable, *cmd[1:]], capture_output=True, text=True, encoding="utf-8", input=stdin_text)
+    proc = subprocess.run(
+        [executable, *cmd[1:]], capture_output=True, text=True, encoding="utf-8", input=stdin_text, timeout=300
+    )
     if proc.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} -> exit {proc.returncode}\n{proc.stderr.strip()}")
     return proc.stdout
@@ -132,20 +150,59 @@ def repo_slug() -> str:
     return gh_json(["repo", "view", "--json", "nameWithOwner"])["nameWithOwner"]
 
 
+SOURCE_SUFFIXES = {".py", ".yml", ".yaml", ".toml", ".cfg", ".ini"}
+MAX_FILE_CHARS = 8_000
+MAX_CONTEXT_CHARS = 40_000
+
+
+def changed_file_context(paths: list[str], root: Path | None = None) -> str:
+    """把改动文件的完整内容附在 diff 后面。
+
+    只给 diff 时模型经常写「无法从 hunk 确认」，把推测当结论；把全文给它，
+    才能真的指出「这个函数在文件里还有另一个调用点」这类问题。
+    文件太大或不存在就跳过，不拿截断的半个文件骗它。
+    """
+    root = root or Path.cwd()
+    chunks: list[str] = []
+    total = 0
+    for raw_path in paths:
+        path = root / raw_path
+        if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if len(text) > MAX_FILE_CHARS or total + len(text) > MAX_CONTEXT_CHARS:
+            continue
+        total += len(text)
+        # 源码不脱敏：脱敏会把 `raw = "api_key=..."` 这类字面量改成 REDACTED，
+        # 模型读到的就不是真语法，会去报「引号没闭合」这种假问题。
+        chunks.append(f"### {raw_path}\n```\n{text}\n```")
+    if not chunks:
+        return ""
+    return "\n\n## 改动文件当前完整内容（用来核对上下文，不要要求更多文件）\n\n" + "\n\n".join(chunks)
+
+
 def collect_pr(number: int, diff_file: str | None) -> str:
+    context = ""
     if diff_file:
         diff = Path(diff_file).read_text(encoding="utf-8", errors="replace")
         meta = f"(本地 diff 文件：{diff_file})"
     else:
         meta_d = gh_json(["pr", "view", str(number), "--json", "title,body,files"])
         diff = run(["gh", "pr", "diff", str(number)])
-        files = ", ".join(f["path"] for f in meta_d["files"][:40])
-        meta = f"标题：{meta_d['title']}\nPR 描述：{meta_d['body'] or '(空)'}\n改动文件：{files}"
-    return f"{meta}\n\n```diff\n{clip(redact(diff), MAX_DIFF_CHARS, 'diff')}\n```"
+        paths = [f["path"] for f in meta_d["files"]]
+        files = ", ".join(paths[:40])
+        meta = redact(f"标题：{meta_d['title']}\nPR 描述：{meta_d['body'] or '(空)'}\n改动文件：{files}")
+        context = changed_file_context(paths)
+    return f"{meta}\n\n```diff\n{clip(redact(diff), MAX_DIFF_CHARS, 'diff')}\n```{context}"
 
 
 def collect_ci(run_id: int, sha: str | None) -> tuple[str, str | None]:
     log = run(["gh", "run", "view", str(run_id), "--log-failed"])
+    if not log.strip():
+        raise EmptyLog(f"run {run_id} 没有可读的失败日志（可能挂在 setup 阶段），跳过诊断")
     run_info = gh_json(["api", f"repos/{repo_slug()}/actions/runs/{run_id}"])
     sha = sha or run_info["head_sha"]
     pr_number = None
@@ -171,7 +228,7 @@ def call_deepseek(system: str, user: str) -> str:
             {"role": "user", "content": user},
         ],
         "temperature": 0.2,
-        "max_tokens": 2000,
+        "max_tokens": 3000,
         "stream": False,
     }
     body = json.dumps(payload).encode("utf-8")
@@ -185,15 +242,32 @@ def call_deepseek(system: str, user: str) -> str:
         )
         try:
             with urllib.request.urlopen(request, timeout=180) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"].strip()
+                raw = response.read()
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:500]
-            raise RuntimeError(f"DeepSeek HTTP {exc.code}: {detail}") from exc
-        except Exception as exc:  # noqa: BLE001 - 网络抖动才重试，HTTP 错误直接抛
-            last_error = exc
-            print(f"attempt {attempt} failed: {exc}", file=sys.stderr)
-    raise RuntimeError(f"DeepSeek 连续 3 次失败：{last_error}")
+            detail = exc.read().decode("utf-8", "replace")[:200]
+            if exc.code == 429 or exc.code >= 500:
+                last_error = RuntimeError(f"模型服务暂时不可用（HTTP {exc.code}）：{detail}")
+                print(f"attempt {attempt}: 服务端 {exc.code}，退避后重试", file=sys.stderr)
+                time.sleep(attempt * 2)
+                continue
+            # 401/400 这类重试没意义，直接把原文给人看，别吞掉。
+            raise RuntimeError(f"模型接口拒绝请求（HTTP {exc.code}）：{detail}") from exc
+        except Exception as exc:  # noqa: BLE001 - 超时/连接中断属于抖动，可重试
+            last_error = RuntimeError(f"连接模型服务失败：{type(exc).__name__}")
+            print(f"attempt {attempt}: {type(exc).__name__}，退避后重试", file=sys.stderr)
+            time.sleep(attempt * 2)
+            continue
+
+        # 响应体解析放在重试之外：返回结构不对是接口契约问题，重试三次也不会变好，
+        # 把它当成「网络抖动」只会掩盖真实原因。
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip()
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"模型返回的内容不是预期的 JSON 结构：{raw[:300]!r}") from exc
+
+    raise RuntimeError(f"连续 3 次调用模型都失败：{last_error}。检查网络出口，或稍后重跑。")
+
 
 
 def post(kind: str, target: str, body: str) -> str:
@@ -226,13 +300,16 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    if not os.environ.get("DEEPSEEK_API_KEY"):
+    stub = os.environ.get("AI_REVIEW_STUB") == "1"
+    if not os.environ.get("DEEPSEEK_API_KEY") and not stub:
         print("skipped: 没有 DEEPSEEK_API_KEY，AI 步骤跳过，workflow 保持绿。")
         return 0
 
     if args.mode == "pr":
         if not args.number and not args.diff_file:
             parser.error("pr 模式需要 --number 或 --diff-file")
+        if args.diff_file and not args.dry_run:
+            parser.error("--diff-file 是本地试跑，必须加 --dry-run（否则会往 issues/0 发评论）")
         context = collect_pr(args.number or 0, args.diff_file)
         header = "## AI 审查（DeepSeek）\n\n"
         review = call_deepseek(PR_SYSTEM, f"这是本次 PR 的全部改动：\n\n{context}")
@@ -243,7 +320,11 @@ def main() -> int:
         print("comment:", post("pr", str(args.number), body))
         return 0
 
-    context, pr_number = collect_ci(args.run_id, args.sha)
+    try:
+        context, pr_number = collect_ci(args.run_id, args.sha)
+    except EmptyLog as exc:
+        print(f"skipped: {exc}")
+        return 0
     diagnosis = call_deepseek(CI_SYSTEM, f"这次 CI 失败了：\n\n{context}")
     body = f"## CI 失败诊断（DeepSeek）\n\n{diagnosis}\n\n---\n> 由 `scripts/ai_review.py` 自动生成，仅供参考。"
     if args.dry_run:
