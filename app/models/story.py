@@ -105,7 +105,7 @@ class Story(Base):
         back_populates="story",
         cascade="all, delete-orphan",
         passive_deletes=True,
-        order_by="Ending.priority",
+        order_by="(Ending.position, Ending.priority)",
     )
     state_changes: Mapped[list["StoryStateChange"]] = relationship(
         back_populates="story",

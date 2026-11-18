@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     UniqueConstraint,
 )
@@ -28,8 +29,9 @@ class Ending(Base):
 
         [{"metric_key": "trust", "operator": "gte", "value": 70}]
 
-    ``priority`` preserves the blueprint's evaluation order; the rule engine
-    will use it to break ties when several endings match. Whether an ending has
+    ``position`` preserves the blueprint array order, while ``priority`` is the
+    rule engine's evaluation order. They are separate because priorities may be
+    valid in any unique order, not only ascending order. Whether an ending has
     actually been reached is *not* stored here: that is play state, recorded as
     a ``StoryStateChange`` event so the history remains the single timeline.
     """
@@ -41,6 +43,7 @@ class Ending(Base):
             "category IN ('low', 'high', 'mixed')", name="ck_endings_category"
         ),
         CheckConstraint("priority >= 1", name="ck_endings_priority"),
+        CheckConstraint("position >= 0", name="ck_endings_position"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -49,6 +52,8 @@ class Ending(Base):
     )
     key: Mapped[str] = mapped_column(String(40), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
+    # SQL rows have no intrinsic order; position preserves the blueprint list.
+    position: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
 
     # --- Immutable narrative ------------------------------------------------
     title: Mapped[str] = mapped_column(String(60), nullable=False)
