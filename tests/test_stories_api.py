@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import Generator
 
@@ -7,9 +8,11 @@ from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.stories import create_story
 from app.clients.deepseek import DeepSeekClientError, LlmReply
 from app.db import create_db_engine
 from app.dependencies import get_db_session, get_story_planner
+from app.errors import AppError
 from app.main import create_app
 from app.models import (
     Base,
@@ -21,6 +24,7 @@ from app.models import (
     Story,
     StoryStateChange,
 )
+from app.schemas.stories import CreateStoryRequest
 from app.schemas.story_blueprint import StoryBlueprint
 from app.services.story_planner import StoryPlanner, StoryPlanningError
 from app.services.story_store import (
@@ -408,10 +412,34 @@ def test_get_missing_story_state_returns_404(api_client: TestClient) -> None:
             "story model credentials were rejected",
         ),
         (
+            DeepSeekClientError("forbidden", retryable=False, status_code=403),
+            503,
+            50302,
+            "story model credentials were rejected",
+        ),
+        (
             DeepSeekClientError("payment required", retryable=False, status_code=402),
             503,
             50303,
             "story model account has insufficient balance",
+        ),
+        (
+            DeepSeekClientError("request timeout", retryable=True, status_code=408),
+            502,
+            50201,
+            "story model is temporarily unavailable",
+        ),
+        (
+            DeepSeekClientError("rate limited", retryable=True, status_code=429),
+            502,
+            50201,
+            "story model is temporarily unavailable",
+        ),
+        (
+            DeepSeekClientError("provider failed", retryable=True, status_code=500),
+            502,
+            50201,
+            "story model is temporarily unavailable",
         ),
         (
             DeepSeekClientError("bad content", retryable=True, status_code=200),
@@ -471,6 +499,23 @@ def test_create_story_preserves_planning_error_contract(
     assert response.status_code == expected_status
     assert response.json()["code"] == expected_code
     assert response.json()["message"] == expected_message
+
+
+def test_create_story_keeps_provider_error_in_the_exception_chain(
+    session_factory: sessionmaker[Session],
+) -> None:
+    provider_error = DeepSeekClientError("auth failed", retryable=False, status_code=401)
+    request = CreateStoryRequest(
+        inspiration="一个小主播误开麦后被恶意剪辑",
+        episode_count=3,
+    )
+
+    with session_factory() as session:
+        with pytest.raises(AppError) as raised:
+            asyncio.run(create_story(request, FailingPlanner(provider_error), session))
+
+    assert raised.value.code == 50302
+    assert raised.value.__cause__ is provider_error
 
 
 def test_story_endpoints_are_present_in_openapi(api_client: TestClient) -> None:
