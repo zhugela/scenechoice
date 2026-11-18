@@ -1,0 +1,71 @@
+name: AI Review
+
+# 两件事：PR 开了就审查改动有没有问题；CI 挂了就诊断根因。
+# 没有配置 DEEPSEEK_API_KEY 时脚本打印 skipped 并退出 0，工作流保持绿，不会挡住合并。
+#
+# 需要的一次性配置（仓库 Settings → Secrets and variables → Actions）：
+#   secret  DEEPSEEK_API_KEY   必填，DeepSeek 的 key
+#   var     DEEPSEEK_BASE_URL  可选，默认 https://api.deepseek.com
+#   var     DEEPSEEK_MODEL     可选，默认 deepseek-chat
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+jobs:
+  review-pr:
+    name: 审查 PR 改动
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_BASE_URL: ${{ vars.DEEPSEEK_BASE_URL || 'https://api.deepseek.com' }}
+      DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-chat' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # 脚本只用标准库，不装依赖：AI 这一步不该因为 pip 慢而失败。
+      - name: Ask DeepSeek to review the diff
+        run: python3 scripts/ai_review.py pr --number "${{ github.event.pull_request.number }}"
+
+  diagnose-ci:
+    name: 诊断 CI 失败
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_BASE_URL: ${{ vars.DEEPSEEK_BASE_URL || 'https://api.deepseek.com' }}
+      DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-chat' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # 有 PR 就评论在 PR 上，没有（master 直推）就评论在那个提交上。
+      - name: Ask DeepSeek why it failed
+        run: python3 scripts/ai_review.py ci --run-id "${{ github.event.workflow_run.id }}"
