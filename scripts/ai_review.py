@@ -203,12 +203,11 @@ def call_deepseek(system: str, user: str) -> str:
         )
         try:
             with urllib.request.urlopen(request, timeout=180) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"].strip()
+                raw = response.read()
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:500]
+            detail = exc.read().decode("utf-8", "replace")[:200]
             if exc.code == 429 or exc.code >= 500:
-                last_error = RuntimeError(f"模型服务暂时不可用（HTTP {exc.code}）")
+                last_error = RuntimeError(f"模型服务暂时不可用（HTTP {exc.code}）：{detail}")
                 print(f"attempt {attempt}: 服务端 {exc.code}，退避后重试", file=sys.stderr)
                 time.sleep(attempt * 2)
                 continue
@@ -218,7 +217,18 @@ def call_deepseek(system: str, user: str) -> str:
             last_error = RuntimeError(f"连接模型服务失败：{type(exc).__name__}")
             print(f"attempt {attempt}: {type(exc).__name__}，退避后重试", file=sys.stderr)
             time.sleep(attempt * 2)
+            continue
+
+        # 响应体解析放在重试之外：返回结构不对是接口契约问题，重试三次也不会变好，
+        # 把它当成「网络抖动」只会掩盖真实原因。
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip()
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"模型返回的内容不是预期的 JSON 结构：{raw[:300]!r}") from exc
+
     raise RuntimeError(f"连续 3 次调用模型都失败：{last_error}。检查网络出口，或稍后重跑。")
+
 
 
 def post(kind: str, target: str, body: str) -> str:

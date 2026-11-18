@@ -92,6 +92,38 @@ def test_call_deepseek_does_not_retry_client_errors(ai_review, monkeypatch):
     assert calls["n"] == 1, "4xx 是配置错误，重试只会浪费时间和额度"
 
 
+def test_call_deepseek_does_not_retry_bad_json(ai_review, monkeypatch):
+    """返回体结构不对是契约问题，重试三次也不会变好，还会掩盖真实原因。"""
+    calls = {"n": 0}
+
+    def fake_urlopen(request, timeout=None):
+        calls["n"] += 1
+        return io.BytesIO(b"not json at all")
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "stub-key")
+    monkeypatch.setattr(ai_review.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="JSON"):
+        ai_review.call_deepseek("system", "user")
+    assert calls["n"] == 1
+
+
+def test_call_deepseek_retries_connection_errors(ai_review, monkeypatch):
+    calls = {"n": 0}
+
+    def fake_urlopen(request, timeout=None):
+        calls["n"] += 1
+        raise urllib.error.URLError("connection reset")
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "stub-key")
+    monkeypatch.setattr(ai_review.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(ai_review.time, "sleep", lambda _s: None)
+
+    with pytest.raises(RuntimeError, match="连续 3 次"):
+        ai_review.call_deepseek("system", "user")
+    assert calls["n"] == 3
+
+
 def test_stub_mode_runs_without_api_key(ai_review, monkeypatch, tmp_path, capsys):
     diff = tmp_path / "sample.diff"
     diff.write_text("diff --git a/x.py b/x.py\n+x = 1\n", encoding="utf-8")
@@ -120,6 +152,15 @@ def test_diff_file_requires_dry_run(ai_review, monkeypatch, tmp_path):
 
     with pytest.raises(SystemExit):
         ai_review.main()
+
+
+def test_empty_failure_log_exits_green_in_main(ai_review, monkeypatch, capsys):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "stub-key")
+    monkeypatch.setattr(ai_review.sys, "argv", ["ai_review.py", "ci", "--run-id", "9"])
+    monkeypatch.setattr(ai_review, "collect_ci", lambda run_id, sha: (_ for _ in ()).throw(ai_review.EmptyLog("no log")))
+
+    assert ai_review.main() == 0
+    assert "skipped" in capsys.readouterr().out
 
 
 def test_empty_failure_log_is_skipped(ai_review, monkeypatch, capsys):
