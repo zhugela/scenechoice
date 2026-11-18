@@ -1,6 +1,6 @@
 {
   "project": "scenechoice",
-  "last_updated": "2026-11-12",
+  "last_updated": "2026-11-16",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -75,6 +75,25 @@
       ],
       "evidence": [],
       "notes": "被 sc-m1-03 卡住；实现与真实评测两条已过，只差个人掌握。"
+    },
+    {
+      "id": "sc-m2-05",
+      "priority": 5,
+      "area": "m2-persistence",
+      "title": "存档动态状态恢复与 endings 数组顺序修复",
+      "user_visible_behavior": "玩家推进后可单独读取当前指标、剧集状态和最近变化；合法乱序 endings 在保存和恢复后保持原数组顺序。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m alembic check"
+      ],
+      "evidence": [
+        "2026-11-16 `tests/test_stories_api.py`：改库后状态接口读回 current_value=7、completed、last_sequence=2；endings priority [2,1,3] 往返保持顺序",
+        "2026-11-16 `tests/test_migrations.py`：含 3 条旧 endings 的 20261115_0001 数据库成功升级到 20261116_0002",
+        "2026-11-16 `.venv/Scripts/python.exe -m pytest -q --basetemp .pytest-tmp/migration-green` → 141 passed, 1 warning",
+        "2026-11-16 `.venv/Scripts/python.exe -m alembic check` → No new upgrade operations detected."
+      ],
+      "notes": "按 PLAN 方案 A 实现；仍等待本人 review，未提交。"
     }
   ]
 }
