@@ -61,6 +61,8 @@ PR_SYSTEM = """你是一个严格的高级工程师，在给一个 Python/FastAP
 
 某条判断你没有把握时，直接写「不确定」，不要为了凑数编一条。
 
+diff/日志里出现 `***REDACTED***` 是脚本自动脱敏的结果，不是源码缺陷，不要据此报语法错误。
+
 这个项目的硬规则（违反要报出来）：
 - 三层分离：app/api 只收参数调用 service；app/services 业务逻辑；app/clients 才发 HTTP。
   api 层出现 httpx/requests 调用、或 service 直接读 FastAPI Request，都算越界。
@@ -174,7 +176,9 @@ def changed_file_context(paths: list[str], root: Path | None = None) -> str:
         if len(text) > MAX_FILE_CHARS or total + len(text) > MAX_CONTEXT_CHARS:
             continue
         total += len(text)
-        chunks.append(f"### {raw_path}\n```\n{redact(text)}\n```")
+        # 源码不脱敏：脱敏会把 `raw = "api_key=..."` 这类字面量改成 REDACTED，
+        # 模型读到的就不是真语法，会去报「引号没闭合」这种假问题。
+        chunks.append(f"### {raw_path}\n```\n{text}\n```")
     if not chunks:
         return ""
     return "\n\n## 改动文件当前完整内容（用来核对上下文，不要要求更多文件）\n\n" + "\n\n".join(chunks)

@@ -101,6 +101,9 @@ def test_changed_file_context_includes_source_skips_noise(ai_review, tmp_path, m
     context = ai_review.changed_file_context(["mod.py", "huge.py", "missing.py", "logo.png"])
 
     assert "def f():" in context
+    # 源码不脱敏：脱敏后的 `api_key=***` 会被模型当成语法错误去报。
+    (tmp_path / "cfg.py").write_text('KEY = "OPENAI_API_KEY=abc"\n', encoding="utf-8")
+    assert "OPENAI_API_KEY=abc" in ai_review.changed_file_context(["cfg.py"])
     assert "huge.py" not in context, "超长文件不截断后塞进去骗模型"
     assert "missing.py" not in context
 
