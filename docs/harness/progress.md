@@ -9,7 +9,7 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-18：153 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-18：158 passed）
 - 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 5 批代码已实现并验证，等待本人 review
@@ -17,6 +17,32 @@
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 012
+
+- 日期：2026-11-18
+- 本轮目标（一句话）：按 `PLAN.md`（M2 第 6 批）把「上游错误 → 应用错误」映射收敛成一份共享函数，并补全 `/api/stories` 的错误码矩阵。
+- 执行方式：由 agentloop 中台第 `#32` 轮派给 Claude Code（4 分 41 秒，$1.9976），本人（Hermes）逐条验收。
+- 基线：`.venv/Scripts/python.exe -m pytest -q` → `153 passed`
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/services/provider_errors.py`（新增，71 行） | 唯一一份 `provider_error_to_app_error(exc) -> AppError`，并把两句 OpenAPI 描述一并搬进同模块 | 这份知识属于「产品策略层」：给定上游失败，我们要对调用方暴露什么码。放 service 层，客户端不感知我们的业务码，两个路由共用同一份 |
+| `app/api/stories.py` | 删掉整段重复映射（−77 行），改为调用共享函数并 `raise ... from exc` | 原先分支链与 preview 逐条重复，且副本丢了异常链 `from exc`；收敛后不会再出现「只改一侧」的漂移 |
+| `app/api/story_plans.py` | 同样改为调用共享函数（−54 行） | 对外行为零变化，只是把知识搬到一处 |
+| `tests/test_stories_api.py`（+45） | 错误矩阵由 7 组扩到 10 组，补 403/408/429/500；新增异常链测试 | 评审指出的覆盖缺口；异常链测试是「副本曾丢 chain」的唯一回归网（`tests/test_stories_api.py:518` 断言 `__cause__`） |
+| `tests/test_retryable_status_source.py`（+94 −32） | 一致性测试同时打 `/api/story-plans/preview` 与 `/api/stories` | 只有两个端点对同一状态码给出相同 `(status, code, message)` 才算真的没漂移 |
+
+- 验收证据（全部由 Hermes 本人执行，不采信 agent 自述）：
+  - 全量：`.venv/Scripts/python.exe -m pytest -q` → `158 passed, 1 warning in 6.06s`
+  - **变异测试**：把 `and not is_retryable_status(exc.status_code)` 临时改成 `and True` → `5 failed, 153 passed`（红的正是 408/429 两组矩阵用例与双端一致性测试）；还原后 `158 passed`，文件 sha256 前 16 位回到 `b44c7636...`，`grep MUTATION` 零残留
+  - 单一事实来源：`grep -rn "50302\|50303\|50201\|50202\|50204" app/` 只命中 `app/services/provider_errors.py`，两个路由文件零残留
+  - 禁改文件：`blueprint_validator.py`、`story_blueprint.py`、`alembic/`、`docs/` 零改动
+  - 双端一致性测试单跑耗时 `2.02s`（未打 slow 标记）
+- 已知风险或未解决问题：
+  - `docs/harness/reviews/latest.md` 里剩余 P2 未做：`blueprint_version` 只建列不读写（旧存档会 500）、`save_blueprint` 的 savepoint 分支零测试、恢复接口原样返回角色 secret 且无归属校验
+  - 本轮改动尚未经本人逐行 review，提交由本人决定
+- 下一步最佳动作：本人 review `app/services/provider_errors.py` 与两份测试改动后决定是否合入 master；之后按评审剩余 P2 继续，`sc-m1-03` 个人掌握验收仍是 M1 阶段门的唯一 blocker。
 
 ### Session 011
 
