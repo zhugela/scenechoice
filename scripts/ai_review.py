@@ -148,16 +148,51 @@ def repo_slug() -> str:
     return gh_json(["repo", "view", "--json", "nameWithOwner"])["nameWithOwner"]
 
 
+SOURCE_SUFFIXES = {".py", ".yml", ".yaml", ".toml", ".cfg", ".ini"}
+MAX_FILE_CHARS = 8_000
+MAX_CONTEXT_CHARS = 40_000
+
+
+def changed_file_context(paths: list[str], root: Path | None = None) -> str:
+    """把改动文件的完整内容附在 diff 后面。
+
+    只给 diff 时模型经常写「无法从 hunk 确认」，把推测当结论；把全文给它，
+    才能真的指出「这个函数在文件里还有另一个调用点」这类问题。
+    文件太大或不存在就跳过，不拿截断的半个文件骗它。
+    """
+    root = root or Path.cwd()
+    chunks: list[str] = []
+    total = 0
+    for raw_path in paths:
+        path = root / raw_path
+        if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if len(text) > MAX_FILE_CHARS or total + len(text) > MAX_CONTEXT_CHARS:
+            continue
+        total += len(text)
+        chunks.append(f"### {raw_path}\n```\n{redact(text)}\n```")
+    if not chunks:
+        return ""
+    return "\n\n## 改动文件当前完整内容（用来核对上下文，不要要求更多文件）\n\n" + "\n\n".join(chunks)
+
+
 def collect_pr(number: int, diff_file: str | None) -> str:
+    context = ""
     if diff_file:
         diff = Path(diff_file).read_text(encoding="utf-8", errors="replace")
         meta = f"(本地 diff 文件：{diff_file})"
     else:
         meta_d = gh_json(["pr", "view", str(number), "--json", "title,body,files"])
         diff = run(["gh", "pr", "diff", str(number)])
-        files = ", ".join(f["path"] for f in meta_d["files"][:40])
+        paths = [f["path"] for f in meta_d["files"]]
+        files = ", ".join(paths[:40])
         meta = redact(f"标题：{meta_d['title']}\nPR 描述：{meta_d['body'] or '(空)'}\n改动文件：{files}")
-    return f"{meta}\n\n```diff\n{clip(redact(diff), MAX_DIFF_CHARS, 'diff')}\n```"
+        context = changed_file_context(paths)
+    return f"{meta}\n\n```diff\n{clip(redact(diff), MAX_DIFF_CHARS, 'diff')}\n```{context}"
 
 
 def collect_ci(run_id: int, sha: str | None) -> tuple[str, str | None]:

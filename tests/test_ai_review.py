@@ -92,6 +92,19 @@ def test_call_deepseek_does_not_retry_client_errors(ai_review, monkeypatch):
     assert calls["n"] == 1, "4xx 是配置错误，重试只会浪费时间和额度"
 
 
+def test_changed_file_context_includes_source_skips_noise(ai_review, tmp_path, monkeypatch):
+    """只给 diff 时模型爱写「无法确认」，所以要附上改动文件的全文。"""
+    (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    (tmp_path / "huge.py").write_text("x = 1\n" * 5000, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    context = ai_review.changed_file_context(["mod.py", "huge.py", "missing.py", "logo.png"])
+
+    assert "def f():" in context
+    assert "huge.py" not in context, "超长文件不截断后塞进去骗模型"
+    assert "missing.py" not in context
+
+
 def test_call_deepseek_does_not_retry_bad_json(ai_review, monkeypatch):
     """返回体结构不对是契约问题，重试三次也不会变好，还会掩盖真实原因。"""
     calls = {"n": 0}
