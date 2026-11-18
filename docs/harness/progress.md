@@ -9,13 +9,41 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-16：141 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-18：153 passed）
+- 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 5 批代码已实现并验证，等待本人 review
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 011
+
+- 日期：2026-11-18
+- 本轮目标（一句话）：把仓库接上「push/PR 自动检查」，并顺手修掉 master 上已经红了三天的 CI。
+- 基线：master 最新提交 `bf59f40` 的 CI 是 `7 failed, 134 passed`；本地 `.venv/Scripts/python.exe -m pytest -q` 为 `141 passed`（修在本地未提交）。
+- 根因：`bf59f40` 提交了迁移 `20261116_0002`、`tests/test_stories_api.py` 和 service，但漏提交 `app/models/ending.py` 与 `app/models/story.py`，master 上的 `Ending` 没有 `position` 字段，测试构造 `Ending(position=...)` 直接 `TypeError`。
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/models/ending.py`、`app/models/story.py` | 补提交 `position` 列与 `(position, priority)` 排序 | 已提交的迁移和测试依赖它们；不补 CI 永远红 |
+| `scripts/ai_review.py`（新增） | 把 PR diff / CI 失败日志交给模型，按项目硬规则产出四节结论并评论 | 光有 CI 只会显示「红了」，没人说清红在哪、为什么 |
+| `.github/workflows/ai-review.yml`（新增） | `pull_request` 审改动；`workflow_run` 在 CI 失败后诊断 | 触发点是 push/PR，不是手动喊 |
+| `docs/harness/ai-review.md`（新增） | 触发点、一次性配置、故意不做的事、成本 | 面试要讲得清「为什么不让 AI 自己改自己审」 |
+| `tests/test_ai_review.py`（新增 12 条） | 重试 / 脱敏 / 跳过 / 空日志 / 上下文拼接 | 闸门自己坏了没人知道 |
+
+- 运行过的验证：
+  - `.venv/Scripts/python.exe -m pytest -q` → `153 passed, 1 warning`
+  - master `ef6d264` CI → success
+  - PR #2 上 `github-actions[bot]` 贴出真实模型审查（连跑三轮，逐轮修掉了重试、脱敏、行号定位三类问题）
+  - 临时分支造一次必挂测试：CI `failure` → `诊断 CI 失败` job 贴出根因与日志证据；验证完分支已删
+- 已知风险或未解决问题：
+  - 模型会编：第一轮 8 条「阻塞问题」里约 2 条是错的（例如断言 `actions/checkout@v7` 不存在——CI 真跑在 v7 上）。结论必须人过滤，不能当门禁。
+  - 仓库 Actions secret 已配 `DEEPSEEK_API_KEY`（用的项目自带 key）。要换：`gh secret set`；要删：`gh secret delete`。
+  - `.claude/` 仍是未跟踪目录，未处理。
+- 关于 dsh-superagent（本次被问到的「superagent」）：本机只有源码和 `dsh` CLI，**没有 `superagent` profile**，且缺 `tmux` 和独立的机器人 GitHub 账号；它的触发方式是「白名单用户 @ 它」，不是「一 push 就动」。本轮按路线 A 做 Actions，未安装它。
+- 下一步最佳动作：`sc-m1-03` 个人掌握验收（6 项自查 + 脱稿讲 M1 数据流）仍是 M1 阶段门的唯一 blocker；AI 审查保持现状观察一周，噪声大再考虑去掉 `synchronize` 事件。
 
 ### Session 010
 
