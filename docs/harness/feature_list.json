@@ -1,6 +1,6 @@
 {
   "project": "scenechoice",
-  "last_updated": "2026-11-16",
+  "last_updated": "2026-11-18",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -113,6 +113,26 @@
         "2026-11-18 master `ef6d264` CI success；`workflow_run` 在 CI 成功时按设计 skip"
       ],
       "notes": "审查结论可能含幻觉，仍需人过滤；secret DEEPSEEK_API_KEY 已配置在仓库 Actions secrets。"
+    },
+    {
+      "id": "sc-m2-06",
+      "priority": 7,
+      "area": "m2-persistence",
+      "title": "上游错误映射收敛为单一事实来源 + /api/stories 错误矩阵补全",
+      "user_visible_behavior": "同一个上游失败（401/402/403/408/429/5xx/200 畸形/永久 4xx/1xx-3xx）在预览与落库两个接口上返回完全一致的状态码、业务码与文案；改坏任一侧都会让测试变红。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        "grep -rn \"50302\\|50303\\|50201\\|50202\\|50204\" app/"
+      ],
+      "evidence": [
+        "2026-11-18 `.venv/Scripts/python.exe -m pytest -q` → 158 passed, 1 warning",
+        "2026-11-18 变异测试：把可重试判断改成 `and True` → 5 failed, 153 passed；还原后 158 passed，sha b44c7636 一致",
+        "2026-11-18 grep 结果：错误码字面量只出现在 app/services/provider_errors.py",
+        "2026-11-18 tests/test_stories_api.py:518 断言落库路径 AppError.__cause__ 为原始 DeepSeekClientError",
+        "2026-11-18 一致性测试同时打两个端点，单跑 2.02s"
+      ],
+      "notes": "由 agentloop 中台 #32 派 Claude Code 实现，Hermes 独立复跑验收。改动尚未经本人逐行 review。"
     }
   ]
 }
