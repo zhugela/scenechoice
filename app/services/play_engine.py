@@ -56,6 +56,12 @@ class ChoiceNotInCurrentEpisode(PlayError):
     code = "choice_not_in_current_episode"
 
 
+class BrokenBlueprint(PlayError):
+    """Persisted data the engine cannot play; validation should have caught it."""
+
+    code = "broken_blueprint"
+
+
 class NoMatchingEnding(PlayError):
     """The blueprint passed reachability validation, so this means the data was changed by hand."""
 
@@ -76,11 +82,23 @@ class PlayOutcome:
 
 
 def current_episode(story: Story) -> Episode:
-    """The episode being played: the ``in_progress`` one, else episode 1 of a fresh story."""
-    for episode in sorted(story.episodes, key=lambda item: item.number):
+    """The episode being played: the ``in_progress`` one, else episode 1 of a fresh story.
+
+    Anything else (no episodes, or a story that claims to be in progress while
+    every episode is completed or still planned) is broken data, not player
+    input — say so instead of silently restarting at episode 1.
+    """
+    ordered = sorted(story.episodes, key=lambda item: item.number)
+    if not ordered:
+        raise BrokenBlueprint("story has no episodes", story=story.public_id)
+    for episode in ordered:
         if episode.status == EpisodeStatus.IN_PROGRESS.value:
             return episode
-    return min(story.episodes, key=lambda item: item.number)
+    if story.status == StoryStatus.READY.value and ordered[0].status == EpisodeStatus.PLANNED.value:
+        return ordered[0]
+    raise BrokenBlueprint(
+        "no episode is in progress", story=story.public_id, statuses={item.number: item.status for item in ordered}
+    )
 
 
 def _next_sequence(session: Session, story_id: int) -> int:
@@ -180,7 +198,11 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
 
         metrics = {metric.key: metric for metric in story.metrics}
         for effect in choice.effects:
-            metric = metrics[effect["metric_key"]]
+            metric_key = effect.get("metric_key")
+            if metric_key not in metrics:
+                # 保存时 BlueprintValidator 已拦过；这里兜底，避免玩到一半抛裸 KeyError。
+                raise BrokenBlueprint("choice references an unknown metric", metric=metric_key, choice=choice.key)
+            metric = metrics[metric_key]
             before = metric.current_value
             after = clamp_metric(before + int(effect["delta"]))
             metric.current_value = after
@@ -233,7 +255,11 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
             )
             story.status = StoryStatus.COMPLETED.value
         else:
-            upcoming = next(item for item in story.episodes if item.number == episode.number + 1)
+            upcoming = next((item for item in story.episodes if item.number == episode.number + 1), None)
+            if upcoming is None:
+                raise BrokenBlueprint(
+                    "episode numbers are not contiguous", after=episode.number, count=story.episode_count
+                )
             changes.append(
                 _change(
                     entity_type=StateChangeEntityType.EPISODE,

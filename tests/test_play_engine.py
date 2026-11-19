@@ -14,10 +14,13 @@ from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import Base, Episode, Metric, StoryStateChange, StoryStatus
+from app.models import Base, Choice, Ending, Episode, Metric, Story, StoryStateChange, StoryStatus
 from app.schemas.story_blueprint import StoryBlueprint
+from app.services.conditions import conditions_all_match
 from app.services.play_engine import (
+    BrokenBlueprint,
     ChoiceNotInCurrentEpisode,
+    NoMatchingEnding,
     StoryFinished,
     StoryNotFound,
     advance_story,
@@ -236,3 +239,74 @@ def test_metric_change_is_clamped_to_the_database_range(
 
     assert outcome.metrics["reputation"] == 100, "95+12 必须夹到 100，否则 CHECK 约束会拒绝写入"
     assert _metric_values(session_factory, public_id)["reputation"] == 100
+
+
+def test_conditions_match_identically_for_dataclass_and_json_dict() -> None:
+    """校验器用 dataclass、执行器读 ORM 的 JSON dict，两套词汇必须给同一个答案。"""
+    from app.schemas.story_blueprint import EndingCondition
+
+    dataclass_conditions = [
+        EndingCondition(metric_id="reputation", operator="gte", value=70),
+        EndingCondition(metric_id="mindset", operator="lt", value=40),
+    ]
+    json_conditions = [
+        {"metric_key": "reputation", "operator": "gte", "value": 70},
+        {"metric_key": "mindset", "operator": "lt", "value": 40},
+    ]
+
+    for values, expected in [
+        ({"reputation": 70, "mindset": 39}, True),
+        ({"reputation": 69, "mindset": 39}, False),
+        ({"reputation": 90, "mindset": 40}, False),
+        ({"reputation": 90}, False),  # 指标缺失 → 条件不成立，不崩
+    ]:
+        assert conditions_all_match(dataclass_conditions, values) is expected
+        assert conditions_all_match(json_conditions, values) is expected
+
+
+def test_choice_effect_referencing_unknown_metric_is_a_play_error(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """保存时校验器已拦过；手工改库绕过校验时，引擎要给 PlayError 而不是裸 KeyError。"""
+    public_id = _save(session_factory)
+    with session_factory() as session:
+        choice = session.scalars(select(Choice).where(Choice.key == "e1_truth")).one()
+        choice.effects = [{"metric_key": "ghost_metric", "delta": 5}]
+        session.commit()
+
+    with session_factory() as session, pytest.raises(BrokenBlueprint) as raised:
+        advance_story(session, public_id, "e1_truth")
+
+    assert raised.value.details["metric"] == "ghost_metric"
+
+
+def test_ending_condition_referencing_unknown_metric_finds_no_ending(
+    session_factory: sessionmaker[Session],
+) -> None:
+    public_id = _save(session_factory)
+    with session_factory() as session:
+        for ending in session.scalars(select(Ending)):
+            ending.conditions = [{"metric_key": "ghost_metric", "operator": "gte", "value": 1}]
+        session.commit()
+
+    with session_factory() as session:
+        advance_story(session, public_id, "e1_truth")
+        advance_story(session, public_id, "e2_truth")
+        session.commit()
+
+    with session_factory() as session, pytest.raises(NoMatchingEnding):
+        advance_story(session, public_id, "e3_truth")
+
+
+def test_story_claiming_progress_with_no_active_episode_is_rejected(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """所有集都是 planned 但故事状态是 in_progress，属于坏数据，不该被当成第 1 集重开。"""
+    public_id = _save(session_factory)
+    with session_factory() as session:
+        story = session.scalars(select(Story).where(Story.public_id == public_id)).one()
+        story.status = StoryStatus.IN_PROGRESS.value
+        session.commit()
+
+    with session_factory() as session, pytest.raises(BrokenBlueprint):
+        advance_story(session, public_id, "e1_truth")
