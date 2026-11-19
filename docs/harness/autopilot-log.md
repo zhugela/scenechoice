@@ -4,7 +4,7 @@
 
 | 日期 | origin/master | pytest | 结论 | 改动 | CI run |
 |---|---|---|---|---|---|
-| 2026-11-19 08:27 | `10aebb3` | 153 passed, 1 warning (4.40s) | 绿 | 无代码改动 | 见下方推送后记录 |
+| 2026-11-19 08:27 | `10aebb3` | 153 passed, 1 warning (4.40s) | 绿 | 无代码改动，仅追加本日志（`865190e`） | `44429197906` success |
 
 ## 2026-11-19 08:27 — `10aebb3`（手动验证运行）
 
@@ -29,3 +29,5 @@
 **环境说明**：直接 `alembic check` 会报 *Target database is not up to date* —— 因为副本里新生成的是空 `scenechoice.db`，不是缺迁移；按 `upgrade head` → `check` 顺序验证即通过。
 
 **改动**：无（全绿不修代码，仅追加本日志）。
+
+**推送与 CI**：本日志提交 `865190e` 已推 `origin/master`；CI run `44429197906` → success。
