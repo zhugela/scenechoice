@@ -159,14 +159,16 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
     episode = current_episode(story)
     choice = next((item for item in episode.choices if item.key == choice_key), None)
     if choice is None:
-        played = any(
-            item.key == choice_key for other in story.episodes for item in other.choices if other is not episode
+        # 「已玩过」指该选择所属的那一集已经完成，而不是「这个 key 不在当前集里」。
+        owner = next(
+            (other for other in story.episodes for item in other.choices if item.key == choice_key), None
         )
         raise ChoiceNotInCurrentEpisode(
             "choice does not belong to the episode being played",
             episode=episode.number,
             choice=choice_key,
-            already_played=played,
+            already_played=owner is not None and owner.status == EpisodeStatus.COMPLETED.value,
+            owner_episode=owner.number if owner else None,
         )
 
     transaction = session.begin() if not session.in_transaction() else session.begin_nested()
@@ -203,8 +205,12 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
                 # 保存时 BlueprintValidator 已拦过；这里兜底，避免玩到一半抛裸 KeyError。
                 raise BrokenBlueprint("choice references an unknown metric", metric=metric_key, choice=choice.key)
             metric = metrics[metric_key]
+            try:
+                delta = int(effect["delta"])
+            except (KeyError, ValueError, TypeError) as error:
+                raise BrokenBlueprint("choice effect has no usable delta", choice=choice.key, effect=effect) from error
             before = metric.current_value
-            after = clamp_metric(before + int(effect["delta"]))
+            after = clamp_metric(before + delta)
             metric.current_value = after
             changes.append(
                 _change(
@@ -212,7 +218,7 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
                     entity_key=metric.key,
                     event_type=StateChangeEventType.METRIC_CHANGED,
                     before={"current_value": before},
-                    after={"current_value": after, "delta": int(effect["delta"])},
+                    after={"current_value": after, "delta": delta},
                 )
             )
 

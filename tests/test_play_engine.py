@@ -310,3 +310,35 @@ def test_story_claiming_progress_with_no_active_episode_is_rejected(
 
     with session_factory() as session, pytest.raises(BrokenBlueprint):
         advance_story(session, public_id, "e1_truth")
+
+
+def test_persisted_ending_with_unknown_operator_is_not_a_crash(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """手工把 operator 改成 ne：应当当作「条件不成立」，最终报没有结局匹配，而不是裸 KeyError。"""
+    public_id = _save(session_factory)
+    with session_factory() as session:
+        for ending in session.scalars(select(Ending)):
+            ending.conditions = [{"metric_key": "reputation", "operator": "ne", "value": 1}]
+        session.commit()
+
+    with session_factory() as session:
+        advance_story(session, public_id, "e1_truth")
+        advance_story(session, public_id, "e2_truth")
+        session.commit()
+
+    with session_factory() as session, pytest.raises(NoMatchingEnding):
+        advance_story(session, public_id, "e3_truth")
+
+
+def test_choice_effect_without_delta_is_a_play_error(session_factory: sessionmaker[Session]) -> None:
+    public_id = _save(session_factory)
+    with session_factory() as session:
+        choice = session.scalars(select(Choice).where(Choice.key == "e1_truth")).one()
+        choice.effects = [{"metric_key": "reputation"}]
+        session.commit()
+
+    with session_factory() as session, pytest.raises(BrokenBlueprint) as raised:
+        advance_story(session, public_id, "e1_truth")
+
+    assert raised.value.details["choice"] == "e1_truth"
