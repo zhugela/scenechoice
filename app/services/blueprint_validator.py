@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from itertools import product
 
 from app.schemas.story_blueprint import EndingBlueprint, StoryBlueprint
+from app.services.conditions import condition_matches
 
 
 @dataclass(frozen=True)
@@ -17,14 +18,8 @@ def _duplicates(values: list[str]) -> set[str]:
     return {value for value in values if values.count(value) > 1}
 
 
-def _condition_matches(operator: str, actual: int, expected: int) -> bool:
-    return {
-        "lt": actual < expected,
-        "lte": actual <= expected,
-        "gt": actual > expected,
-        "gte": actual >= expected,
-        "eq": actual == expected,
-    }[operator]
+# 求值逻辑只有一份：app/services/conditions.py（这里只是沿用旧名字，避免改一堆调用点）
+_condition_matches = condition_matches
 
 
 def _ending_reachable(ending: EndingBlueprint, metric_ids: list[str]) -> bool:
