@@ -9,14 +9,232 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-18：158 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：201 passed）
 - 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
-- 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 5 批代码已实现并验证，等待本人 review
+- 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 7/8/9 批（`sc-m2-07` 推进端点、`sc-m2-08` 版本契约、`sc-m2-09` 口径对齐）代码已完成并验证，**三批都在等负责人读懂门（队列 3 批）**；第 10 批（`sc-m2-10`）是纯收尾，无新用户可见行为，已 passing
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 018（M2 第 11 批：PR AI 审查回灌）
+
+- 日期：2026-11-20
+- 触发：PR #6 上 `github-actions[bot]` 的 AI 审查给了 2 条阻塞。Hermes 过滤后两条都算「建议看代价」，采纳并回灌。
+- 基线：`43801d6`，`201 passed`。
+
+| 审查意见 | Hermes 复核结论 | 处置 |
+|---|---|---|
+| 路由里 `session.commit()` 违反「api 只收参数调 service」 | 成立：`advance_story` 里 `with transaction:` 退出时已经处理提交，路由那句多余；而且**谁负责提交这件事没有任何测试钉住** | 删掉路由的 commit；**把 commit 移进引擎**（见下）；补 3 条测试 |
+| 两个入口的版本比较看不到共用同一份逻辑 | 成立（异常类型按层分开是对的，比较逻辑重复了） | `blueprint_contract.version_is_supported()` 成为唯一比较点，store 与 engine 都改用它 |
+
+- 本轮最关键的一处（不是审查提的，是回灌时自己撞出来的）：
+  - Claude Code 删掉路由 commit 后自己发现：请求路径里 `advance_story` 之前的 SELECT 已经触发 autobegin，所以 `in_transaction()` 为真 → 走 **`begin_nested()`**；SQLite 上 `RELEASE` 恰好会提交（就是 Session 017 那个坑），所以 203 条测试全绿，**但这是靠 SQLite 的怪癖侥幸落库**。换到事务立即开始的后端（Postgres/MySQL），释放 savepoint 只合并不提交，请求 session 关闭时回滚 —— 玩家的操作会**静默丢失**。
+  - 处置：在 `advance_story` 的 `with transaction:` 块之后显式 `session.commit()`，注释写清「不要依赖 savepoint 释放」。新增 `test_engine_commits_and_leaves_no_transaction_open`：断言引擎返回后 `session.in_transaction()` 为 **False** —— 这条断言才是「真的提交了」，SQLite 的怪癖骗不过它。
+- 验证证据（Hermes 实跑）：
+  - 全量：`204 passed, 1 warning in 7.48s`（基线 201，净增 3）
+  - `compileall app tests` → 通过；`grep -n "session.commit()" app/api/play.py` → 零命中
+  - `grep -n "blueprint_version != " -r app/` → 零命中（比较只剩 `blueprint_contract.py`）
+  - **变异 K**（删掉引擎里那句 `session.commit()`）→ `1 failed, 17 passed`，红的正是 `test_engine_commits_and_leaves_no_transaction_open`；还原后复跑 204 passed，`grep MUTATION` 零残留
+  - 独立探针（Hermes 手写脚本，跑完即弃）：`advance_story` 返回后 `session.in_transaction()` 为 False，新会话能看到 6 条事件行、指标 `reputation=62`
+- 已知风险：
+  - 引擎现在无条件 `session.commit()`：将来若有人想把 `advance_story` 嵌进更大的事务（比如「推进 + 记积分」原子提交），需要再加 `commit: bool = True` 参数，否则会被引擎提前提交。目前只有一个调用方（play 路由），没有这个需求。
+  - `begin_nested()` 分支仍然存在（请求路径永远走它，因为 SELECT 已 autobegin）；它的意义是「部分失败不污染请求事务」，但没有任何测试从 Postgres 角度验证过。
+  - AI 审查里还提到「`get_db_session` 异常路径是否 rollback」：`app/db.py:33` 是 `with SessionLocal() as session:`，`Session.__exit__` 会 close → 回滚未提交事务，结论是安全的；已用新会话零新增行测试间接钉住。
+- 下一步最佳动作：PR #6 已 `CLEAN`（CI + AI 审查都绿）。剩余可做项都是 M2 的 P3（WAL/busy_timeout、幂等键、时间戳带时区）；但更该做的是清读懂门（队列 3 批）。
+
+### Session 017（M2 第 10 批：只做收尾，不加新行为）
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：补上 `save_blueprint` savepoint 分支的测试网、把剩下的业务码字面量收干净、给版本闸加一条双端一致性测试、把 `BLUEPRINT_VERSION` 挪到中立模块。**不加任何新用户可见行为**（读懂门队列已有 3 批）。
+- 执行方式：`PLAN.md` 写任务书 → Claude Code 一轮（4 分 24 秒）→ Hermes 独立复验 + 三次变异。
+- 基线：`98c3cc4`，`197 passed`。
+
+| 单元 | 文件 | 改了什么 | 为什么 |
+|---|---|---|---|
+| U1 savepoint 测试 | `tests/test_stories_api.py`（+129） | 三条：外层 rollback → 7 表 0 行；外层 commit → 整树落库；savepoint 内失败 → 外层仍可用且失败那棵零残留 | 评审 P2 点名「这个分支是第 3 批把保存嵌进更大事务的入口，零测试」 |
+| U1 顺带修的真 bug | `app/services/story_store.py` | 新增 `_start_outer_transaction()`：savepoint 分支里若 DBAPI 连接还没开事务（SQLite），先显式 `BEGIN` | **测试第一次跑就红**：pysqlite 懒开事务，调用方还没写过东西时，第一条语句就是我们的 `SAVEPOINT`；SQLite 对「由 savepoint 自己开启的事务」执行 `RELEASE` 时直接提交，调用方的 `rollback()` 变空操作 → docstring 承诺的 all-or-nothing 不成立。这是修 bug，不是改设计 |
+
+### U2 业务码收敛 / U3 双端一致性 / U4 契约常量
+
+| 单元 | 文件 | 改了什么 | 为什么 |
+|---|---|---|---|
+| U2 | `app/errors.py`、`provider_errors.py`、`api/stories.py`、`api/story_plans.py`、`dependencies.py` | 补齐 7 个 provider 侧常量（42201/50201/50202/50204/50301/50302/50303），全部改为引用；行为零变化 | `app/errors.py` 已是唯一来源，这些字面量是最后一批残留 |
+| U3 | `tests/test_play_api.py`（+35） | 一条：同一旧版本存档，详情与推进**两边**都 409 + 40902 | 版本闸有两处，之前没有任何测试同时打两边 |
+| U4 | `app/blueprint_contract.py`（新增）+ `story_store.py`、`play_engine.py` | `BLUEPRINT_VERSION` 挪到中立模块，`play_engine` 不再 import `story_store` | 上批遗留的风险：engine 为一个常量 import 整个 store，方向没有测试守着，反向 import 就会成环 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`201 passed, 1 warning in 7.44s`（基线 197，净增 4）
+  - `compileall app tests` → 通过；`.venv/Scripts/python.exe -c "import app.main"` → 通过
+  - **变异 H**（删掉 `_start_outer_transaction(session)` 调用）→ `1 failed, 200 passed`，红的正是 `test_save_blueprint_inside_outer_transaction_rolls_back_with_it`（证明这条测试真能抓住那个静默提交）
+  - **变异 I**（`begin_nested()` 改 `begin()`）→ `3 failed`，三条 savepoint 用例全红
+  - **变异 J**（详情接口版本闸换错异常）→ `1 failed`，红的正是双端一致性用例
+  - 三次还原后 `grep MUTATION app tests` 零残留，复跑 201 passed
+  - 单一来源：`grep -rn "42201\|50201\|50202\|50204\|50301\|50302\|50303" app/ --include=*.py` 只命中 `app/errors.py`（7 行）
+  - `grep -n "story_store" app/services/play_engine.py` → 零命中
+- 已知风险：
+  - 修复靠 pysqlite 的私有属性 `driver_connection.in_transaction` 判「是否已开事务」。SQLAlchemy 或 pysqlite 升级后要重看；非 SQLite 走 early return，**Postgres 上没验证过**（M2 没有 Postgres）。
+  - 「外层先写过一条 DML 再 savepoint」这条路径本来就没问题（Claude Code 单独验证过），现在也没有专门的测试钉住它；变异 H 只覆盖了「外层还没写」。
+  - 本轮破例允许改实现（PLAN 原本写「U1 只加测试」）：因为测试第一次就跑红，暴露的是真 bug 而不是测试写错。已按 playbook 第四节第 4 类（禁改清单越界要说清为什么）记录在此。
+  - 读懂门队列仍是 3 批（7/8/9），本批没有新增用户可见行为，所以不追加；但 `_start_outer_transaction` 这处修复是「最难自己看出来」的一段代码，建议列进读懂门的第 4 题。
+- 下一步最佳动作：M2 剩余 P3（WAL / busy_timeout、幂等键、时间戳带时区）都是**不加新玩法**的小口子，可继续；但更值得做的是先清读懂门。
+
+### Session 016（M2 第 9 批：推进接口口径对齐）
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：把「旧版本存档」和「存档内部不一致」在推进接口上的口径，对齐到详情接口已经定好的 40902 / 50003；不开新玩法。
+- 执行方式：`PLAN.md` 写任务书 → Claude Code 一轮（2 分 16 秒）→ Hermes 独立复验 + 两次变异。
+- 基线：合并 master 后 `7c0ae28`，`.venv/Scripts/python.exe -m pytest -q` → `194 passed`。
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/services/play_engine.py` | 新增 `UnsupportedBlueprintVersion(PlayError)`；`advance_story` 取到 story 之后加 4 行版本闸；`advance_story` 的 docstring 补列这两个异常（docstring 由 Hermes 补，Claude Code 按「只加版本闸」的约束没敢动） | 推进链路原本完全不看 `blueprint_version`，同一个旧存档在详情接口被 40902 挡住、在推进接口照旧执行。**破例改引擎的理由**：替代方案是在路由里再查一次存档，那会把「按 public_id 取存档」拆成两处，第二个取数点将来照样漂移 |
+| `app/services/play_errors.py` | `UnsupportedBlueprintVersion → 409/40902`；`BrokenBlueprint → 500/50003`；两条 OpenAPI 描述同步写清四个码 | master 的引擎会抛 `BrokenBlueprint`（选项引用不存在的指标），此前没有映射，落进 50002 兜底网，玩家看到的是「story could not be advanced」，等于把「存档坏了」伪装成「未知故障」 |
+| `tests/test_play_api.py`（只追加） | 3 条：旧版本推进 → 409/40902 且零写入；选项引用 ghost 指标 → 500/50003（显式断言不是 50002）；OpenAPI 描述含 40902/50003 | 前两条各守一条新分支；第三条守文档口径不漂 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`197 passed, 1 warning in 7.31s`（基线 194，净增 3）
+  - `compileall app tests` → 通过
+  - **变异 F**（版本闸改 `if False:`）→ `1 failed`，红的正是 `test_old_blueprint_version_returns_409_40902_and_writes_nothing`
+  - **变异 G**（`BrokenBlueprint` 分支短路）→ `1 failed`，红的正是 `test_broken_choice_effect_returns_500_50003_instead_of_the_fallback`
+  - 两次还原后 `grep MUTATION` 零残留，复跑 197 passed
+  - `git diff app/services/play_engine.py`：只有 import 一行 + 异常类 6 行 + 版本闸 7 行 + docstring 3 行
+  - 禁改比对（`app/schemas`、`blueprint_validator.py`、`conditions.py`、`app/models`、`alembic`、`requirements.txt`、`tests/test_play_engine*.py`）→ 空
+- 已知风险：
+  - `play_engine` 现在 import `story_store`（只为一个常量），模块加载变重；目前无环（store 不 import engine），但**没有测试守着这个方向**，将来谁在 store 里 import engine 就会当场炸——上策是把 `BLUEPRINT_VERSION` 挪到中立模块，留给下一批。
+  - 版本闸现在有**两处**（详情接口一处、推进引擎一处），同一个常量同一个码，但缺一条「双端一致性」测试（第 6 批给 provider 错误矩阵做过同类网）——下一批补。
+  - `BrokenBlueprint` 与 `BlueprintCorruptedError` 共用 50003，但两条消息不同（`cannot be opened` / `cannot be advanced`）；这是有意的：码表示「存档坏了」，消息说清坏在哪个动作上。
+  - **读懂门队列已经 3 批（7、8、9）**，按 playbook R7 都不该在答完前继续叠加新功能。
+- 下一步最佳动作：不再开新功能。批次 10 只做「不加新用户可见行为」的收尾：`save_blueprint` 的 savepoint 三条测试、`provider_errors` 里 `42201/502xx/503xx` 字面量收敛、双端版本闸一致性测试。
+
+### Session 015（合并 origin/master，解 PR #6 冲突）
+
+- 触发：PR #6 建好后 GitHub 报 `CONFLICTING`。原因是 master 上另有两条线先落地——批次 6 的错误映射收敛（`55fd3cf` / `a77d599`）与 M3 选择执行引擎（`057a1f0` / `eac0a6d` / `50bc9ff`，经 PR #5 合入）。其中 M3 引擎与本分支 `b6d89c9` 的「play engine 服务层回滚点」是同一条河的两次改道。
+- 冲突 7 个文件，逐个判（类：disjoint / 同题两答 / 被取代）：
+
+| 文件 | 类 | 处置与理由 |
+|---|---|---|
+| `app/services/play_engine.py`（add/add） | 同题两答 | **取 master**：master 是超集（多 `BrokenBlueprint`、指标夹取、集数连续性校验），且带 `tests/test_play_engine.py` 344 行 + `test_play_engine_transaction.py` 93 行；本分支那份是 `b6d89c9` 明确标注的「仅作回滚点」 |
+| `app/services/conditions.py`（add/add） | 同题两答 | **取 master**：82 行版本同时服务 validator 与 engine，接口更完整 |
+| `tests/test_play_engine.py`（add/add） | 同题两答 | **取 master**：覆盖更全，本分支 10 条是它的子集 |
+| `app/services/blueprint_validator.py` | disjoint（同一意图） | 两侧都把 `_condition_matches` 改成转发 `conditions.py`；取 master 的一行别名（`_condition_matches = condition_matches`）比本分支的包装函数更短。**副产品**：Session 013 挂着的「validator 越界改动待确认」现在有独立证据——两条线各自独立做了同一处收敛，予以保留 |
+| `PLAN.md`、`docs/harness/feature_list.json`、`docs/harness/progress.md` | 被取代 | **保留本分支**：master 侧是批次 6 的旧任务书（已归档在 `docs/exec-plans/completed/PLAN-m2-batch6-error-mapping.md`），本分支带着 Session 014 与批次 8 的新记录 |
+| `app/api/stories.py`、`tests/test_stories_api.py`、`tests/test_retryable_status_source.py`、`app/services/provider_errors.py` | disjoint | git 自动合并，无需人工介入 |
+
+- 合并后验证：`.venv/Scripts/python.exe -m pytest -q` → **194 passed, 1 warning in 7.12s**（187 + master 带来的 engine/transaction 测试）
+- 合并顺带暴露两条待办（进批次 9）：master 的引擎会抛 `BrokenBlueprint`（存档内部不一致，如选项引用了不存在的指标），`play_errors` 目前没映射它 → 落到 50002 兜底网；另外推进接口仍不校验 `blueprint_version`，与详情接口口径不一致。
+
+### Session 014
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：M2 第 8 批 —— 把「存档载入」的版本契约补上，并把业务错误码收敛成单一来源；不开新玩法、不动 play 链路。
+- 执行方式：`PLAN.md` 写任务书 → 实现由 Claude Code（`claude -p`，四轮，合计约 6 分钟）→ Hermes 独立复验 + 五次变异测试 + 一次「漏网形状」探针 → Codex 外部审查一轮。
+- 基线：`./docs/harness/init.sh` → `179 passed, 1 warning in 6.69s`（开工前实测）。
+
+| 单元 | 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|---|
+| U1 版本契约 | `app/services/story_store.py` | 新增 `BLUEPRINT_VERSION = 1`、`BlueprintVersionError`、`BlueprintCorruptedError`；`save_blueprint` 显式写 `blueprint_version`；`load_blueprint` 先比版本，重建段捕 `(ValidationError, KeyError, IndexError, TypeError, AttributeError)` | `blueprint_version` 此前只建列不读写，旧形状存档会让玩家看到裸 `500 internal server error`，无法区分「旧版本」和「数据被改坏」 |
+| U1 路由映射 | `app/api/stories.py` | `GET /api/stories/{public_id}` 捕两类异常 → `AppError(409/40902)`、`AppError(500/50003)`，均 `raise ... from exc`；OpenAPI 补 409 描述 | 与既有 `BlueprintStorageError → 42201` 同一写法；版本不兼容是冲突（409）不是客户端写错，库外改坏是服务端故障（500） |
+| U2 错误码单一来源 | `app/errors.py`、`app/api/stories.py`、`app/services/play_errors.py` | 7 个业务码常量（40401/40001/40901/40902/50001/50002/50003）；两处路由由字面量改为引用常量，OpenAPI 描述保留给人看的数字 | 此前 `40401` 有 3 处字面量，改一处漏一处就会漂移；行为零变化 |
+| 测试 | `tests/test_stories_api.py`（只追加） | 5 条新增（3 条 U1 + 1 条参数化 2 case） | 版本不匹配、pydantic 拦得住的损坏、pydantic 拦不住的损坏，三条路径各有断言 |
+
+- 打回与修复（这一轮真正的教训）：
+  - 第一轮交付只捕 `ValidationError`。Hermes 用一次性探针实测另外两种形状：`endings.conditions = '"oops"'` → **裸 500/500**；`choices.effects` 缺 `metric_key` → **直接把 `KeyError` 抛穿路由**（靠中间件兜）。
+  - 判为本批阻塞（U1 的定义就是「库外改坏要给 50003 人话」），第二轮扩捕到 5 类异常并补 1 条参数化用例；探针文件用完即删，未入库。
+- 验证证据（全部由 Hermes 实跑，不采信 agent 自述）：
+  - 全量：`.venv/Scripts/python.exe -m pytest -q` → **`187 passed, 1 warning in 6.81s`**（基线 179，净增 8）
+  - 编译：`.venv/Scripts/python.exe -m compileall -q app tests` → 通过
+  - **变异 A**（版本比较改 `if False:`）→ `1 failed, 26 passed`，红的正是 `test_get_story_with_unsupported_blueprint_version_returns_409_40902`；还原后 sha 回 `b8eb8194df4c7093`
+  - **变异 B**（`except ValidationError` 改成 `except ZeroDivisionError`）→ `1 failed`，红的正是损坏用例
+  - **变异 C**（except 元组只留 `ValidationError`）→ `2 failed`，红的正是新增参数化两例
+  - **变异 D**（`_require_string_list` 只 `return list(value)`，拿掉形状检查）→ `1 failed`，红的正是 `test_get_story_with_scalar_json_personality_returns_500_50003`
+  - **变异 E**（宽 except 去掉 `ValueError`）→ `1 failed`，红的正是 `test_get_story_with_corrupt_invalid_json_personality_returns_500_50003`
+  - 五次变异每次还原后 sha 一致（终态 `8643805cdbbd1cc1`），`grep MUTATION` 零残留，复跑 187 passed
+  - 禁改比对：`git diff --stat app/schemas/story_blueprint.py app/services/blueprint_validator.py app/services/play_engine.py app/services/conditions.py alembic/ requirements.txt` → 空
+  - 老用例零改动：`tests/test_stories_api.py` 的 diff 只有 import 增一行 + 文件末尾追加，无删除行
+
+##### Codex 外部审查（第 4 步，`codex exec review --uncommitted`）
+
+结论：`overall_correctness = patch is correct`；4 条、无阻塞（其中 1 条 P2 是真漏洞）：
+
+| 级别 | 问题 | 处理 |
+|---|---|---|
+| P2 | `list(...)` 不是形状检查：JSON 列被改成字符串时 `list("abc")` → `['a','b','c']`，pydantic 照收，详情接口返回 **200 + 搅烂的数据** | **已修**：新增 `_require_string_list()`，`isinstance(list)` + 每元素 `isinstance(str)`，否则 50003；补 `test_get_story_with_scalar_json_personality_returns_500_50003` |
+| P2 | `feature_list.json` 同时挂两个 `in_progress`，违反自身 `single_active_feature` 与 AGENTS.md:28 | **已修**：`sc-m2-07` / `sc-m2-08` 都置 `blocked`（阻塞项=负责人读懂门），notes 写明 |
+| P3 | `.claude/settings.local.json.bak-before-deny` 未跟踪且未被忽略，`git add -A` 会带进仓 | **已修**：`.gitignore` 增 `.claude/`，`git check-ignore` 验证命中 |
+| P3 | 详情端点返回 500/50003 但 OpenAPI 只声明 404/409 | **已修**：补 500 描述（含 `50003`），补 `test_get_story_openapi_declares_archive_corruption_500` |
+
+- 第四轮（Claude Code）：把 `session.scalar()` 一并纳入 try、宽 except 加 `ValueError`（覆盖 `json.JSONDecodeError`），并把 `BlueprintVersionError` / `BlueprintCorruptedError` 用 `except ...: raise` 提前原样放行 —— 否则版本不匹配会被误转成 50003。补 `test_get_story_with_corrupt_invalid_json_personality_returns_500_50003`。
+- 已知风险：
+  - `50003` 现在覆盖「JSON 列被改坏」的主要形状，但仍不是「任何损坏」：顶层类型正确、嵌套字段语义不对（如 `delta` 不是整数）会走 pydantic 或业务逻辑，没有逐字段交叉校验。
+  - `BLUEPRINT_VERSION` 只有一个值 `1`，没有升级/回填路径；它与 alembic 迁移无机制关联，将来改 schema 要人工记得同步。
+  - 40902 的 message 把服务端支持的版本号告诉客户端（等于公开契约版本），可接受但要知道。
+  - 本批**未做**：角色 `secret` / 结局 `conditions` 是否下发、`public_id` 要不要 ownership（PLAN 第五节非目标，属产品决定，等负责人选方案）；`save_blueprint` 的 savepoint 三条测试；WAL/`busy_timeout`/幂等键/生成元信息落库。
+  - `provider_errors.py` 与 `create_story` 里的 `42201 / 502xx / 503xx` 仍是字面量（本批允许改的文件不含 `provider_errors.py`），下一批再收。
+  - **推进接口不校验版本**：`POST /api/stories/{public_id}/play` 走 `play_engine` 自己的取值路径，不经过 `load_blueprint`。所以一份旧版本存档在详情接口会被 409 挡住，在推进接口却照旧执行（读到的是 `current_value` / `episode.status` / `effects` JSON）。要一致就得把版本检查下沉到「按 public_id 取存档」的唯一入口，下一批处理。
+  - `sc-m2-08` 仍为 `in_progress`：负责人读懂门没做，按 R7 不进 `passing`。
+- 下一步最佳动作：负责人答第 8 批读懂门三问（见交付报告）；答完把 `sc-m2-07` / `sc-m2-08` 一并置 `passing`。下一批候选：`secret`+ownership 方案（要负责人选 A/B）、savepoint 三条测试、`provider_errors` 字面量收敛。
+
+### Session 013
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：把负责人的 Agent Loop 规则固化成文件、给工作区里「无任务书」的 play engine 补任务书并建立回滚点；**不开新功能实现**。
+- 基线：`.venv/Scripts/python.exe -m pytest -q` → `168 passed, 1 warning in 6.37s`（第 6 批收工时 158，净增 10 条来自 `tests/test_play_engine.py`）
+- 本轮做的三件事：
+
+| 动作 | 产出 | 为什么 |
+|---|---|---|
+| 固化负责人 11-20 口述的四个答案 | `docs/harness/agent-loop-playbook.md`（R1–R9 + 9 步流程 + 四类停手条件 + 自查清单模板） | 负责人不看代码、不看 diff，交付标准必须写死成「可观察证据 + 自查清单」，否则每轮都要重新讨论 |
+| 换任务书 | `PLAN.md` → M2 第 7 批；第 6 批归档到 `docs/exec-plans/completed/PLAN-m2-batch6-error-mapping.md` | 上次覆盖 PLAN 丢了历史（Session 007 已记录该风险），这次先归档 |
+| 建回滚点 | `b6d89c9`（代码检查点）、`b1c62b7`（文档） | 此前 4 个文件一直未提交，改坏了无处可退 |
+
+- 本轮查到的关键事实：
+  - **`app/services/play_engine.py` 的 `advance_story()` 零调用方**：`grep -rn "play_engine" app/ tests/` 只命中测试文件；`app/api/` 现有路由仅 stories ×4 + story_plans ×1 → 推进功能只有服务层，玩家没有任何入口，属「写了一半」。
+  - `app/services/blueprint_validator.py` 被上一轮改了 3+/7-（`_condition_matches` 改为转发 `conditions.py`）。行为等价、`168 passed` 兜底，但该文件在历次禁改清单内，等负责人一句话确认保留或回退。
+  - `.claude/` 仍未跟踪且未被 `.gitignore` 覆盖（Session 007 已记录，未处理）。
+- 约束遵守情况：未实现新功能；未改 M1 阶段门与 `sc-m1-03`；未改任何已有测试预期；未 push。
+- 已知风险：`b6d89c9` 提交的是负责人尚未读懂的代码，仅作回滚点，不代表已验收；读懂门（T1）未过之前不得在其上叠加新实现。
+- 下一步最佳动作：负责人答 `PLAN.md` 第三节 T1 的三问（Hermes 只挑错、不代答）；通过后选 T2 的 URL 方案 A/B，再由 Claude Code 实现端点。
+
+#### 第二轮（同日，负责人授权自主执行：`Run this plan ... don't ask me anymore`）
+
+负责人明确要求「按计划自己跑完、不要再问」，因此本轮的 T2–T7 由 Hermes 自主决策并执行；**T1 读懂门仍未完成，仍挂在负责人身上**。
+
+| 决策 / 动作 | 内容 | 依据 |
+|---|---|---|
+| T2 URL 形态 | 选方案 A：`POST /api/stories/{public_id}/play`，body `{"choice_key": "..."}` | 与既有 `/api/stories` 前缀一致；未来「回退一步」「跳过本集」可在同一资源上加动作 |
+| T4 错误码 | `40001` 跨集选错 / `40901` 已结局 / `50001` 无匹配结局 / `50002` 兜底 / 沿用 `40401` | 与既有「状态码 ×100 + 序号」规则一致（40401、42201、50201…） |
+| 新增文件 | `app/api/play.py`（46 行）、`app/services/play_errors.py`（57 行）、`tests/test_play_api.py`（11 条） | T3/T4/T5 |
+| 改动文件 | `app/main.py`（+2 行挂载路由）、`app/schemas/stories.py`（+3 个契约模型） | 同上 |
+
+- 验证证据（全部由 Hermes 实跑）：
+  - 新测试单跑：`pytest -q tests/test_play_api.py` → `11 passed, 1 warning in 0.99s`
+  - 全量：`pytest -q` → **`179 passed, 1 warning in 6.57s`**（基线 168，净增 11）
+  - 编译：`python -m compileall -q app tests` → 通过
+  - **变异 1**（`play_engine.py:90` 把 `(last or 0) + 1` 改成 `(last or 0)`）→ `13 failed, 166 passed`；还原后 sha256 前 16 位回到 `0a584642ce0c64e7`，`grep MUTATION` 零残留，复跑 `179 passed`
+  - **变异 2**（`play_errors.py` 把 `code=40001` 改成 `40002`）→ `1 failed, 10 passed`（红的正是跨集用例）；已还原
+  - 禁改比对：`git diff --stat app/schemas/story_blueprint.py alembic/ requirements.txt app/services/blueprint_validator.py` → 空
+  - 单一事实来源：`grep -rn "40001\|40901\|50001\|50002\|40401" app/` → 新码只出现在 `app/services/play_errors.py`（`40401` 在 `app/api/stories.py` 有 2 处既有字面量，留给下一批收敛）
+- 已知风险：
+  - 推进接口不是幂等重放：客户端超时重试会多消耗一集（与 Session 009 记录的 POST 风险同类）。
+  - 接口仍无鉴权与归属校验，`public_id` 就是能力凭据（Session 003/010 已记录，未变）。
+  - `40401` 现有 3 处字面量（`stories.py` ×2 + `play_errors.py` ×1），下批收敛到 `app/errors.py` 常量。
+
+##### Codex 外部审查（第 4 步，`codex exec review`）
+
+结论：**零阻塞**。1 条 P2 + 2 条 P3 已按「阻塞必修、建议看代价」处理：
+
+| 级别 | 问题 | 处理 |
+|---|---|---|
+| P2 | 500 回滚测试只断言状态，未断言事件行数 / `last_sequence` / 指标 | **已修**：请求前后快照三者并逐一断言，用例改名为 `..._rolls_every_thing_back` |
+| P3 | `50002` 兜底码在本端点不可达，却被写进 OpenAPI 500 描述 | **已修**：描述只保留 `50001`；代码保留兜底并注明「未来子类的防御网」 |
+| P3 | 模块注释声称「错误码只出现在此」，但 `40401` 在 `stories.py` 仍有 2 处 | **已修**：注释限定为「play 专用码的单一来源」，并把 `40401` 收敛登记为下批工作 |
+
+- 补做的变异测试（证明新断言不是摆设）：在 `advance_story` 里插入 `session.commit()` 模拟「边推边存」的部分提交 bug → `5 failed, 6 passed`，其中 `test_no_matching_ending_returns_500_and_rolls_every_thing_back` 变红；还原后 sha256 前 16 位回到 `0a584642ce0c64e7`，`grep MUTATION` 零残留。
+- 复验：`pytest -q` → `179 passed, 1 warning in 6.62s`；`compileall` 通过。
+
+- 下一步最佳动作：负责人做 T1 读懂门三问（`PLAN.md` 第三节）；通过后把 `sc-m2-07` 置 passing，再开下一批（`40401` 收敛 + 鉴权/归属校验）。
 
 ### Session 012
 

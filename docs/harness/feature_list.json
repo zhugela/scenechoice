@@ -1,6 +1,6 @@
 {
   "project": "scenechoice",
-  "last_updated": "2026-11-18",
+  "last_updated": "2026-11-20",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -133,6 +133,114 @@
         "2026-11-18 一致性测试同时打两个端点，单跑 2.02s"
       ],
       "notes": "由 agentloop 中台 #32 派 Claude Code 实现，Hermes 独立复跑验收。改动尚未经本人逐行 review。"
+    },
+    {
+      "id": "sc-m2-07",
+      "priority": 8,
+      "area": "m2-play-loop",
+      "title": "玩家推进从服务层接到 HTTP 层",
+      "user_visible_behavior": "玩家对一个存档提交一个选项，服务端在同一事务里改指标、推进剧集、判定结局并写事件日志，返回当前状态；跨集选错、已结局、存档不存在各有明确错误码。",
+      "status": "blocked",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        "存在可调用的推进端点，且 GET /api/stories/{public_id}/state 能看到 last_sequence 增长"
+      ],
+      "evidence": [
+        "2026-11-20 基线 `.venv/Scripts/python.exe -m pytest -q` → 168 passed, 1 warning（服务层已有 10 条测试，但无 HTTP 出口）",
+        "2026-11-20 `grep -rn \"play_engine\" app/ tests/` 只命中 tests/test_play_engine.py，证明 advance_story() 零调用方",
+        "2026-11-20 端点落地：`POST /api/stories/{public_id}/play`，全量 `.venv/Scripts/python.exe -m pytest -q` → 179 passed, 1 warning in 6.57s（净增 11 条 test_play_api.py）",
+        "2026-11-20 变异 1：`play_engine.py:90` `(last or 0) + 1` → `(last or 0)` → 13 failed, 166 passed；还原后 sha256 前 16 位 0a584642ce0c64e7，复跑 179 passed",
+        "2026-11-20 变异 2：`play_errors.py` `code=40001` → `40002` → 1 failed, 10 passed（跨集用例变红），已还原",
+        "2026-11-20 禁改比对 `git diff --stat app/schemas/story_blueprint.py alembic/ requirements.txt app/services/blueprint_validator.py` → 空",
+        "2026-11-20 Codex 外部审查 `codex exec review`：零阻塞，1 条 P2（500 回滚测试断言不全）+ 2 条 P3 已修",
+        "2026-11-20 变异 3：`advance_story` 插入 `session.commit()` 模拟部分提交 → 5 failed, 6 passed（含 500 回滚用例）；还原后 sha 0a584642ce0c64e7，复跑 179 passed"
+      ],
+      "notes": "端点、错误码映射、11 条测试已完成，经 Hermes 独立复验 + Codex 外部审查（零阻塞）。状态由 in_progress 改为 blocked：唯一阻塞是负责人 T1 读懂门三问未答（任务书存档在 docs/exec-plans/active/PLAN-m2-batch7-play-http-endpoint.md 第三节），按 agent-loop-playbook R7 未过读懂门不进 passing；blocked 而不是 in_progress 是为了不在 feature_list 里同时挂两个活跃功能（Codex 2026-11-20 P2）。答完三问即置 passing。"
+    },
+    {
+      "id": "sc-m2-08",
+      "priority": 9,
+      "area": "m2-persistence",
+      "title": "存档载入的版本契约 + 业务错误码单一来源",
+      "user_visible_behavior": "拿一份旧版本或已被改坏的存档链接去请求，看到的是 409 + 40902 / 500 + 50003 的人话提示，不再是一句 internal server error；同一业务码在全仓只有一处定义。",
+      "status": "blocked",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests",
+        "git diff --stat app/schemas/story_blueprint.py app/services/blueprint_validator.py app/services/play_engine.py app/services/conditions.py alembic/ requirements.txt"
+      ],
+      "evidence": [
+        "2026-11-20 开工基线 `./docs/harness/init.sh` → 179 passed, 1 warning in 6.69s",
+        "2026-11-20 收工全量 `.venv/Scripts/python.exe -m pytest -q` → 187 passed, 1 warning in 6.81s（净增 8 条）",
+        "2026-11-20 新增用例 8 条：test_save_blueprint_writes_explicit_blueprint_version、test_get_story_with_unsupported_blueprint_version_returns_409_40902、test_get_story_with_corrupted_blueprint_returns_500_50003、test_get_story_with_unpackable_json_columns_returns_500_50003[2]、test_get_story_with_scalar_json_personality_returns_500_50003、test_get_story_with_corrupt_invalid_json_personality_returns_500_50003、test_get_story_openapi_declares_archive_corruption_500",
+        "2026-11-20 五次变异全部变红并还原：A 版本比较改 if False → 1 failed；B except 改 ZeroDivisionError → 1 failed；C except 只留 ValidationError → 2 failed；D 拿掉 list 形状检查 → 1 failed（scalar personality）；E 宽 except 去掉 ValueError → 1 failed（非法 JSON）。每次还原后 sha 一致、复跑 187 passed",
+        "2026-11-20 探针实测（用完即删）：第一轮实现下 endings.conditions='\"oops\"' → 裸 500/500、choices.effects 缺 metric_key → KeyError 抛穿路由；第二轮扩捕后两者均 500/50003",
+        "2026-11-20 Codex 外部审查（`codex exec review --uncommitted`）：overall_correctness = patch is correct；4 条（1 P2 真漏洞 + 1 P2 harness 规则 + 2 P3），已全部处理或登记",
+        "2026-11-20 禁改比对 git diff --stat（schema/validator/play_engine/conditions/alembic/requirements）→ 空；tests/test_stories_api.py 只有追加无删除行"
+      ],
+      "notes": "由 Claude Code 四轮实现（第一轮只捕 ValidationError 被探针打回；第三轮补 list 形状检查 + OpenAPI 500；第四轮把非法 JSON 的 JSONDecodeError 也收进 50003），Hermes 独立复验 + 五次变异。状态为 blocked：唯一阻塞是负责人第 8 批读懂门三问未答（R7）。未做：secret/conditions 下发与 ownership（等负责人选方案）、savepoint 三条测试、provider_errors 里 42201/502xx 字面量收敛、推进接口的版本校验（已由批次 9 补上）。"
+    },
+    {
+      "id": "sc-m2-09",
+      "priority": 10,
+      "area": "m2-play-loop",
+      "title": "推进接口与详情接口的口径对齐（版本闸 + 拆蓝图异常映射）",
+      "user_visible_behavior": "同一份旧版本存档，在详情接口和推进接口都被同一个 409/40902 挡住；存档内部不一致（如选项引用不存在的指标）时推进接口返回 500/50003，不再含糊地报 50002。",
+      "status": "blocked",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests",
+        "git diff --stat app/schemas app/services/blueprint_validator.py app/services/conditions.py app/models alembic requirements.txt tests/test_play_engine.py tests/test_play_engine_transaction.py"
+      ],
+      "evidence": [
+        "2026-11-20 基线：合并 master 后 `7c0ae28` → 194 passed",
+        "2026-11-20 收工 `.venv/Scripts/python.exe -m pytest -q` → 197 passed, 1 warning in 7.31s（净增 3）",
+        "2026-11-20 新增用例：test_old_blueprint_version_returns_409_40902_and_writes_nothing、test_broken_choice_effect_returns_500_50003_instead_of_the_fallback、test_openapi_documents_version_and_corruption_codes",
+        "2026-11-20 变异 F（版本闸改 if False）→ 1 failed（旧版本用例）；变异 G（BrokenBlueprint 分支短路）→ 1 failed（损坏用例）；还原后零残留、复跑 197 passed",
+        "2026-11-20 `git diff app/services/play_engine.py` 只有 import 1 行 + 异常类 6 行 + 版本闸 7 行 + docstring 3 行；禁改清单 diff 为空"
+      ],
+      "notes": "状态 blocked：卡在负责人读懂门（R7），且读懂门队列已有 3 批（sc-m2-07/08/09）。遗留：BLUEPRINT_VERSION 宜挪到中立模块（现由 play_engine import story_store，方向无测试守）；版本闸两处缺「双端一致性」测试；下一批做纯测试/收敛，不加新用户可见行为。"
+    },
+    {
+      "id": "sc-m2-10",
+      "priority": 11,
+      "area": "m2-hardening",
+      "title": "事务与错误码收尾：savepoint 测试网、业务码单一来源、双端版本闸一致性",
+      "user_visible_behavior": "对外行为零变化。收益是「将来改坏会被测试抓住」：savepoint 分支的静默提交被修掉，业务码全仓只在 app/errors.py 定义一次，旧版本存档在两个入口的响应被同一条测试钉住。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests",
+        "grep -rn \"42201|50201|50202|50204|50301|50302|50303\" app/ --include=*.py",
+        "grep -n story_store app/services/play_engine.py"
+      ],
+      "evidence": [
+        "2026-11-20 基线 98c3cc4 → 197 passed；收工 `.venv/Scripts/python.exe -m pytest -q` → 201 passed, 1 warning in 7.44s",
+        "2026-11-20 变异 H（删掉 _start_outer_transaction 调用）→ 1 failed（savepoint 回滚用例）；变异 I（begin_nested 改 begin）→ 3 failed（三条 savepoint 用例全红）；变异 J（详情接口版本闸换错异常）→ 1 failed（双端一致性用例）；还原后零残留、复跑 201 passed",
+        "2026-11-20 savepoint 分支的静默提交 bug 是测试第一次跑就暴露的：pysqlite 懒开事务时 SAVEPOINT 成为事务开端，RELEASE 即提交，外层 rollback 变空操作",
+        "2026-11-20 `grep -rn \"42201|50201|50202|50204|50301|50302|50303\" app/ --include=*.py` 只命中 app/errors.py 7 行；`grep -n story_store app/services/play_engine.py` 零命中；`python -c \"import app.main\"` 通过"
+      ],
+      "notes": "本批故意不加新用户可见行为，因此不追加读懂门队列；但 _start_outer_transaction（依赖 pysqlite 私有属性 in_transaction）建议列入读懂门第 4 题。破例改实现的原因（测试暴露真 bug）已记录在 progress.md Session 017。"
+    },
+    {
+      "id": "sc-m2-11",
+      "priority": 12,
+      "area": "m2-hardening",
+      "title": "PR AI 审查回灌：提交边界归引擎 + 版本比较单一来源",
+      "user_visible_behavior": "对外行为零变化。收益有二：推进结果不再依赖 SQLite 的 savepoint 怪癖才能落库（换后端也不会静默丢写），版本比较全仓只有一份。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        "grep -n \"session.commit()\" app/api/play.py",
+        "grep -rn \"blueprint_version != \" app/"
+      ],
+      "evidence": [
+        "2026-11-20 基线 43801d6 → 201 passed；收工 `pytest -q` → 204 passed, 1 warning in 7.48s",
+        "2026-11-20 变异 K（删掉引擎里的 session.commit()）→ 1 failed（test_engine_commits_and_leaves_no_transaction_open）；还原后复跑 204 passed",
+        "2026-11-20 探针：advance_story 返回后 session.in_transaction() 为 False，新会话可见 6 条事件行、reputation=62",
+        "2026-11-20 grep：app/api/play.py 无 session.commit()；app/ 内无 blueprint_version != （比较只剩 blueprint_contract.version_is_supported）"
+      ],
+      "notes": "源自 PR #6 的 AI 审查（2 条阻塞，Hermes 过滤后全部采纳）。最大的收获不是审查那两条，而是回灌时发现「推进落库曾依赖 SQLite savepoint 释放会提交」这一隐式依赖——已改成引擎显式 commit 并用 in_transaction() 断言钉住。遗留：引擎无条件 commit（将来要组合事务需加参数）。"
     }
   ]
 }

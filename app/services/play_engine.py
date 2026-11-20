@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.blueprint_contract import BLUEPRINT_VERSION, version_is_supported
 from app.models import (
     Choice,
     Ending,
@@ -50,6 +51,12 @@ class StoryNotFound(PlayError):
 
 class StoryFinished(PlayError):
     code = "story_finished"
+
+
+class UnsupportedBlueprintVersion(PlayError):
+    """The stored archive was produced by a blueprint contract this server cannot play."""
+
+    code = "story_version_unsupported"
 
 
 class ChoiceNotInCurrentEpisode(PlayError):
@@ -138,8 +145,9 @@ def _change(
 def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutcome:
     """Apply one choice to a story archive, in one transaction.
 
-    Raises :class:`StoryNotFound`, :class:`StoryFinished`,
-    :class:`ChoiceNotInCurrentEpisode` or :class:`NoMatchingEnding`; nothing is
+    Raises :class:`StoryNotFound`, :class:`UnsupportedBlueprintVersion`,
+    :class:`StoryFinished`, :class:`ChoiceNotInCurrentEpisode`,
+    :class:`NoMatchingEnding` or :class:`BrokenBlueprint`; nothing is
     written when one of them is raised.
     """
     story = session.scalar(
@@ -153,6 +161,13 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
     )
     if story is None:
         raise StoryNotFound("story not found", public_id=public_id)
+    if not version_is_supported(story.blueprint_version):
+        raise UnsupportedBlueprintVersion(
+            f"this story archive uses blueprint version {story.blueprint_version}; "
+            f"this server supports version {BLUEPRINT_VERSION}",
+            stored=story.blueprint_version,
+            supported=BLUEPRINT_VERSION,
+        )
     if story.status in FINISHED_STATUSES:
         raise StoryFinished("story already finished", status=story.status)
 
@@ -282,7 +297,7 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
             session.add(StoryStateChange(story=story, sequence=sequence + offset, **change))
         session.flush()
 
-        return PlayOutcome(
+        outcome = PlayOutcome(
             story_public_id=story.public_id,
             story_status=story.status,
             episode_number=episode.number,
@@ -291,3 +306,14 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
             ending_key=ending_key,
             sequence=sequence + len(changes) - 1,
         )
+
+    # The engine owns the commit, not the route. Do not rely on exiting the
+    # block above: in the request path the preceding SELECT has already started
+    # a transaction, so ``transaction`` is a savepoint, and releasing a savepoint
+    # only merges — it does not make the write durable on every backend (SQLite
+    # happens to commit there because pysqlite starts its transaction lazily,
+    # which is exactly the quirk ``story_store._start_outer_transaction`` works
+    # around). Committing here is what makes "the player's move is saved"
+    # true regardless of that quirk.
+    session.commit()
+    return outcome

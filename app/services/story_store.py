@@ -12,6 +12,9 @@ from uuid import uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+# Re-exported for callers that still import it from this module; the definition
+# lives in the neutral contract module shared with the play engine.
+from app.blueprint_contract import BLUEPRINT_VERSION, version_is_supported
 from app.models import (
     Character,
     Choice,
@@ -47,6 +50,46 @@ class BlueprintStorageError(ValueError):
         self.issues = issues
 
 
+class BlueprintVersionError(ValueError):
+    """Raised when a stored archive was produced by a different contract."""
+
+    def __init__(self, stored: int, supported: int) -> None:
+        super().__init__(
+            f"stored blueprint version {stored} is not supported "
+            f"(this server supports version {supported})"
+        )
+        self.stored = stored
+        self.supported = supported
+
+
+class BlueprintCorruptedError(ValueError):
+    """Raised when stored JSON columns cannot be rebuilt into a blueprint.
+
+    The API only writes archives through the validator, so this can only mean
+    the database was changed outside the API: a server-side fault, not a
+    client mistake.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("stored blueprint cannot be rebuilt")
+
+
+def _require_string_list(value: object) -> list[str]:
+    """Return a copy of a JSON column that must hold an array of strings.
+
+    ``list(value)`` is not a shape check: ``list("abc")`` silently becomes
+    ``["a", "b", "c"]`` and pydantic then accepts the mangled result, so a
+    column hand-edited into a plain string would leave the detail endpoint
+    answering 200 with rewritten data. Only an explicit ``isinstance`` check
+    turns that into the corruption the 50003 contract promises.
+    """
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) for item in value
+    ):
+        raise BlueprintCorruptedError()
+    return list(value)
+
+
 def _story_from_blueprint(blueprint: StoryBlueprint) -> Story:
     story = Story(
         public_id=str(uuid4()),
@@ -56,6 +99,9 @@ def _story_from_blueprint(blueprint: StoryBlueprint) -> Story:
         theme=blueprint.theme,
         episode_count=blueprint.episode_count,
         status=StoryStatus.READY.value,
+        # Explicit, not the column default: the version must track the mapping
+        # code in this module even if the schema's default ever changes.
+        blueprint_version=BLUEPRINT_VERSION,
     )
 
     story.characters = [
@@ -132,6 +178,27 @@ def _story_from_blueprint(blueprint: StoryBlueprint) -> Story:
     return story
 
 
+def _start_outer_transaction(session: Session) -> None:
+    """Make the caller's transaction exist at the database level.
+
+    pysqlite opens the database transaction lazily and only immediately before
+    DML. When a caller begins a transaction but has not written yet, the first
+    statement SQLAlchemy sends is our ``SAVEPOINT``. SQLite treats that
+    savepoint as the statement that started the transaction, so releasing it
+    commits instead of merely merging into the outer transaction, and the
+    caller's later ``rollback()`` cannot undo the save. Emitting ``BEGIN`` up
+    front keeps the savepoint genuinely nested.
+
+    Only SQLite needs the nudge; other drivers begin when the Session does.
+    """
+    connection = session.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    dbapi_connection = connection.connection.driver_connection
+    if not dbapi_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
+
+
 def save_blueprint(session: Session, blueprint: StoryBlueprint) -> Story:
     """Save one complete story in one transaction.
 
@@ -145,9 +212,11 @@ def save_blueprint(session: Session, blueprint: StoryBlueprint) -> Story:
     if issues:
         raise BlueprintStorageError(issues)
 
-    transaction = (
-        session.begin() if not session.in_transaction() else session.begin_nested()
-    )
+    if session.in_transaction():
+        _start_outer_transaction(session)
+        transaction = session.begin_nested()
+    else:
+        transaction = session.begin()
     with transaction:
         story = _story_from_blueprint(blueprint)
         session.add(story)
@@ -182,85 +251,118 @@ def load_blueprint(session: Session, public_id: str) -> StoryBlueprint | None:
             selectinload(Story.endings),
         )
     )
-    story = session.scalar(statement)
-    if story is None:
-        return None
+    # The query is inside the guard because SQLite does not enforce JSON
+    # validity: a column hand-edited into text like ``abc`` is deserialized by
+    # SQLAlchemy while ``session.scalar`` materialises the rows, before the
+    # rebuild code below ever runs. ``json.JSONDecodeError`` is a
+    # ``ValueError``, so widening the handler to ``ValueError`` is what turns
+    # that shape into the same named corruption fault as the others.
+    try:
+        story = session.scalar(statement)
+        if story is None:
+            return None
 
-    return StoryBlueprint(
-        title=story.title,
-        logline=story.logline,
-        genre=story.genre,
-        theme=story.theme,
-        episode_count=story.episode_count,
-        characters=[
-            CharacterBlueprint(
-                id=character.key,
-                name=character.name,
-                role=character.role,
-                goal=character.goal,
-                secret=character.secret,
-                personality=list(character.personality),
+        if not version_is_supported(story.blueprint_version):
+            raise BlueprintVersionError(
+                stored=story.blueprint_version,
+                supported=BLUEPRINT_VERSION,
             )
-            for character in story.characters
-        ],
-        metrics=[
-            MetricBlueprint(
-                id=metric.key,
-                name=metric.name,
-                description=metric.description,
-                initial_value=metric.initial_value,
-                low_label=metric.low_label,
-                high_label=metric.high_label,
-            )
-            for metric in story.metrics
-        ],
-        episodes=[
-            EpisodeBlueprint(
-                number=episode.number,
-                objective=episode.objective,
-                conflict=episode.conflict,
-                character_ids=list(episode.character_keys),
-                required_events=list(episode.required_events),
-                cliffhanger=episode.cliffhanger,
-                resolution=episode.resolution,
-                choices=[
-                    ChoiceBlueprint(
-                        id=choice.key,
-                        text=choice.text,
-                        intent=choice.intent,
-                        effects=[
-                            MetricEffect(
-                                metric_id=effect["metric_key"],
-                                delta=effect["delta"],
-                            )
-                            for effect in choice.effects
-                        ],
-                        consequence_hint=choice.consequence_hint,
-                    )
-                    for choice in episode.choices
-                ],
-            )
-            for episode in story.episodes
-        ],
-        endings=[
-            EndingBlueprint(
-                id=ending.key,
-                title=ending.title,
-                summary=ending.summary,
-                category=ending.category,
-                conditions=[
-                    EndingCondition(
-                        metric_id=condition["metric_key"],
-                        operator=condition["operator"],
-                        value=condition["value"],
-                    )
-                    for condition in ending.conditions
-                ],
-                priority=ending.priority,
-            )
-            for ending in story.endings
-        ],
-    )
+
+        return StoryBlueprint(
+            title=story.title,
+            logline=story.logline,
+            genre=story.genre,
+            theme=story.theme,
+            episode_count=story.episode_count,
+            characters=[
+                CharacterBlueprint(
+                    id=character.key,
+                    name=character.name,
+                    role=character.role,
+                    goal=character.goal,
+                    secret=character.secret,
+                    personality=_require_string_list(character.personality),
+                )
+                for character in story.characters
+            ],
+            metrics=[
+                MetricBlueprint(
+                    id=metric.key,
+                    name=metric.name,
+                    description=metric.description,
+                    initial_value=metric.initial_value,
+                    low_label=metric.low_label,
+                    high_label=metric.high_label,
+                )
+                for metric in story.metrics
+            ],
+            episodes=[
+                EpisodeBlueprint(
+                    number=episode.number,
+                    objective=episode.objective,
+                    conflict=episode.conflict,
+                    character_ids=_require_string_list(episode.character_keys),
+                    required_events=_require_string_list(episode.required_events),
+                    cliffhanger=episode.cliffhanger,
+                    resolution=episode.resolution,
+                    choices=[
+                        ChoiceBlueprint(
+                            id=choice.key,
+                            text=choice.text,
+                            intent=choice.intent,
+                            effects=[
+                                MetricEffect(
+                                    metric_id=effect["metric_key"],
+                                    delta=effect["delta"],
+                                )
+                                for effect in choice.effects
+                            ],
+                            consequence_hint=choice.consequence_hint,
+                        )
+                        for choice in episode.choices
+                    ],
+                )
+                for episode in story.episodes
+            ],
+            endings=[
+                EndingBlueprint(
+                    id=ending.key,
+                    title=ending.title,
+                    summary=ending.summary,
+                    category=ending.category,
+                    conditions=[
+                        EndingCondition(
+                            metric_id=condition["metric_key"],
+                            operator=condition["operator"],
+                            value=condition["value"],
+                        )
+                        for condition in ending.conditions
+                    ],
+                    priority=ending.priority,
+                )
+                for ending in story.endings
+            ],
+        )
+    # ``BlueprintVersionError`` and ``BlueprintCorruptedError`` are themselves
+    # ``ValueError`` subclasses, so they are re-raised before the broad handler
+    # below. Order matters: without this clause a version mismatch would become
+    # a corruption 500, and the explicit shape check in ``_require_string_list``
+    # would be swallowed and re-wrapped as an equivalent error with a lost
+    # cause chain.
+    except (BlueprintVersionError, BlueprintCorruptedError):
+        raise
+    # Everything caught here means the same thing: the stored archive cannot be
+    # rebuilt. Two families are covered. (1) Validation and deserialisation:
+    # pydantic's ``ValidationError`` subclasses ``ValueError``, and a JSON
+    # column whose text is not valid JSON raises ``json.JSONDecodeError`` from
+    # the row loader, also a ``ValueError``; the broad name covers both without
+    # naming them individually. (2) Shapes pydantic accepts but unpacking does
+    # not: a missing mapping key raises ``KeyError``, indexing a string as a
+    # mapping raises ``TypeError``, and a scalar where a sequence is expected
+    # raises ``TypeError``/``IndexError``/``AttributeError``. All of them become
+    # the one server-fault error the API contract names.
+    except (KeyError, IndexError, TypeError, AttributeError, ValueError) as exc:
+        raise BlueprintCorruptedError() from exc
 
 
 def load_story_state(

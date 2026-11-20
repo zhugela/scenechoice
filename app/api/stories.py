@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.clients.deepseek import DeepSeekClientError
 from app.dependencies import get_db_session, get_story_planner
-from app.errors import AppError
+from app.errors import (
+    AppError,
+    STORY_ARCHIVE_CORRUPTED,
+    STORY_NOT_FOUND,
+    STORY_PLAN_INVALID,
+    STORY_VERSION_UNSUPPORTED,
+)
 from app.models import Story
 from app.schemas.response import ApiResponse
 from app.schemas.stories import (
@@ -30,7 +36,9 @@ from app.services.provider_errors import (
 )
 from app.services.story_planner import StoryPlanner, StoryPlanningError
 from app.services.story_store import (
+    BlueprintCorruptedError,
     BlueprintStorageError,
+    BlueprintVersionError,
     list_stories,
     load_blueprint,
     load_story_state,
@@ -85,7 +93,7 @@ async def create_story(
     except StoryPlanningError as exc:
         raise AppError(
             "unable to create a valid story plan",
-            code=42201,
+            code=STORY_PLAN_INVALID,
             status_code=422,
         ) from exc
 
@@ -94,7 +102,7 @@ async def create_story(
     except BlueprintStorageError as exc:
         raise AppError(
             "unable to create a valid story plan",
-            code=42201,
+            code=STORY_PLAN_INVALID,
             status_code=422,
         ) from exc
     return StoryCreatedResponse(data=StoryCreatedData(**_summary(story).model_dump()))
@@ -134,7 +142,7 @@ def get_story_state(
 ) -> StoryStateResponse:
     loaded = load_story_state(session, public_id, change_limit=change_limit)
     if loaded is None:
-        raise AppError("story not found", code=40401, status_code=404)
+        raise AppError("story not found", code=STORY_NOT_FOUND, status_code=404)
 
     story, recent_changes = loaded
     return StoryStateResponse(
@@ -171,15 +179,39 @@ def get_story_state(
     "/{public_id}",
     response_model=StoryDetailResponse,
     summary="Restore a complete story blueprint",
-    responses={404: {"model": ApiResponse, "description": "Story not found"}},
+    responses={
+        404: {"model": ApiResponse, "description": "Story not found"},
+        409: {
+            "model": ApiResponse,
+            "description": "Story archive uses an unsupported blueprint version (40902)",
+        },
+        500: {
+            "model": ApiResponse,
+            "description": "Stored story archive is corrupted (50003)",
+        },
+    },
 )
 def get_story(
     public_id: str,
     session: Session = Depends(get_db_session),
 ) -> StoryDetailResponse:
-    blueprint = load_blueprint(session, public_id)
+    try:
+        blueprint = load_blueprint(session, public_id)
+    except BlueprintVersionError as exc:
+        raise AppError(
+            f"this story archive uses blueprint version {exc.stored}; "
+            f"this server supports version {exc.supported}",
+            code=STORY_VERSION_UNSUPPORTED,
+            status_code=409,
+        ) from exc
+    except BlueprintCorruptedError as exc:
+        raise AppError(
+            "this story archive is corrupted and cannot be opened",
+            code=STORY_ARCHIVE_CORRUPTED,
+            status_code=500,
+        ) from exc
     if blueprint is None:
-        raise AppError("story not found", code=40401, status_code=404)
+        raise AppError("story not found", code=STORY_NOT_FOUND, status_code=404)
     return StoryDetailResponse(
         data=StoryDetailData(public_id=public_id, blueprint=blueprint)
     )

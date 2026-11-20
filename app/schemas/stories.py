@@ -95,3 +95,29 @@ class StoryListResponse(BaseModel):
     code: int = 0
     message: str = "ok"
     data: StoryListData
+
+
+class PlayChoiceRequest(BaseModel):
+    """One player action. ``extra="forbid"`` so a typo'd field is a 422, not a silent no-op."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    choice_key: str = Field(min_length=1, max_length=64)
+
+
+class PlayOutcomeData(BaseModel):
+    """What one accepted choice did, in the order the client should show it."""
+
+    public_id: str
+    status: str
+    episode_number: int = Field(ge=1, le=5)
+    next_episode_number: int | None = Field(default=None, ge=1, le=5)
+    metrics: list[MetricState]
+    ending_key: str | None = None
+    sequence: int = Field(ge=0)
+
+
+class PlayOutcomeResponse(BaseModel):
+    code: int = 0
+    message: str = "ok"
+    data: PlayOutcomeData

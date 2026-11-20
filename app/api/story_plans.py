@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.clients.deepseek import DeepSeekClientError
 from app.dependencies import get_story_planner
-from app.errors import AppError
+from app.errors import AppError, STORY_PLAN_INVALID
 from app.schemas.response import ApiResponse
 from app.schemas.story_blueprint import (
     CreateStoryPlanRequest,
@@ -48,7 +48,11 @@ async def preview_story_plan(
     except DeepSeekClientError as exc:
         raise provider_error_to_app_error(exc) from exc
     except StoryPlanningError as exc:
-        raise AppError("unable to create a valid story plan", code=42201, status_code=422) from exc
+        raise AppError(
+            "unable to create a valid story plan",
+            code=STORY_PLAN_INVALID,
+            status_code=422,
+        ) from exc
     return StoryPlanPreviewResponse(
         data=StoryPlanPreviewData(
             blueprint=result.blueprint,

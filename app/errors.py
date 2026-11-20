@@ -1,3 +1,11 @@
+"""SceneChoice's shared business error codes.
+
+Codes follow ``HTTP status x 100 + sequence`` (for example ``40902`` is
+``409`` with sequence ``02``), so a code can be read as an HTTP status without
+looking at the mapping module.
+"""
+
+
 class AppError(Exception):
     """可安全返回给客户端的业务异常。"""
 
@@ -6,3 +14,56 @@ class AppError(Exception):
         self.message = message
         self.code = code
         self.status_code = status_code
+
+
+# The story archive does not exist.
+STORY_NOT_FOUND = 40401
+
+# The submitted choice does not belong to the episode being played.
+PLAY_CHOICE_NOT_IN_EPISODE = 40001
+
+# The story has already reached an ending and accepts no further choices.
+STORY_FINISHED = 40901
+
+# The stored archive was produced by a blueprint contract this server does not
+# support. The request is valid, so this is a conflict rather than a 4xx input
+# error.
+STORY_VERSION_UNSUPPORTED = 40902
+
+# The blueprint passed reachability validation, so an unmatched end state means
+# the archive was changed outside the API: a server-side fault.
+NO_MATCHING_ENDING = 50001
+
+# Defensive net for a future play-engine failure without a specific mapping.
+PLAY_ADVANCE_FALLBACK = 50002
+
+# Stored JSON columns cannot be rebuilt into a blueprint. Only a write outside
+# the API can cause this, so it is a server-side fault.
+STORY_ARCHIVE_CORRUPTED = 50003
+
+# The model replied, but what came back could not become a storable blueprint.
+# Used both by the planner path and by storage validation so the client sees one
+# code regardless of which stage rejected the output.
+STORY_PLAN_INVALID = 42201
+
+# The provider is reachable but is not currently able to serve the request
+# (5xx, timeout, rate limit, or no status at all).
+STORY_MODEL_UNAVAILABLE = 50201
+
+# The provider rejected our request itself: retrying the same payload cannot
+# help.
+STORY_MODEL_REQUEST_REJECTED = 50202
+
+# The provider answered below 400 but the status was not the expected success
+# code, so the reply does not match the protocol we implemented.
+STORY_MODEL_PROTOCOL_ERROR = 50204
+
+# No API key is configured for this deployment.
+STORY_MODEL_NOT_CONFIGURED = 50301
+
+# The provider rejected our credentials.
+STORY_MODEL_CREDENTIALS_REJECTED = 50302
+
+# The provider account is out of balance, so no retry can succeed until it is
+# topped up.
+STORY_MODEL_INSUFFICIENT_BALANCE = 50303
