@@ -1,6 +1,6 @@
 {
   "project": "scenechoice",
-  "last_updated": "2026-11-18",
+  "last_updated": "2026-11-20",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -151,9 +151,11 @@
         "2026-11-20 端点落地：`POST /api/stories/{public_id}/play`，全量 `.venv/Scripts/python.exe -m pytest -q` → 179 passed, 1 warning in 6.57s（净增 11 条 test_play_api.py）",
         "2026-11-20 变异 1：`play_engine.py:90` `(last or 0) + 1` → `(last or 0)` → 13 failed, 166 passed；还原后 sha256 前 16 位 0a584642ce0c64e7，复跑 179 passed",
         "2026-11-20 变异 2：`play_errors.py` `code=40001` → `40002` → 1 failed, 10 passed（跨集用例变红），已还原",
-        "2026-11-20 禁改比对 `git diff --stat app/schemas/story_blueprint.py alembic/ requirements.txt app/services/blueprint_validator.py` → 空"
+        "2026-11-20 禁改比对 `git diff --stat app/schemas/story_blueprint.py alembic/ requirements.txt app/services/blueprint_validator.py` → 空",
+        "2026-11-20 Codex 外部审查 `codex exec review`：零阻塞，1 条 P2（500 回滚测试断言不全）+ 2 条 P3 已修",
+        "2026-11-20 变异 3：`advance_story` 插入 `session.commit()` 模拟部分提交 → 5 failed, 6 passed（含 500 回滚用例）；还原后 sha 0a584642ce0c64e7，复跑 179 passed"
       ],
-      "notes": "端点、错误码映射、11 条测试已完成并独立复验；仍为 in_progress 的原因：负责人 T1 读懂门三问未答（PLAN.md 第三节），按 agent-loop-playbook R7 未过读懂门不进 passing。"
+      "notes": "端点、错误码映射、11 条测试已完成，经 Hermes 独立复验 + Codex 外部审查（零阻塞）。仍为 in_progress 的唯一原因：负责人 T1 读懂门三问未答（PLAN.md 第三节），按 agent-loop-playbook R7 未过读懂门不进 passing。"
     }
   ]
 }

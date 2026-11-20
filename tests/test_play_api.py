@@ -178,7 +178,11 @@ def test_choice_from_another_episode_returns_400_and_writes_nothing(
     assert _state(api_client, public_id)["last_sequence"] == before_sequence
 
 
-def test_no_matching_ending_returns_500_and_leaves_the_story_unfinished(
+def _metrics(state: dict) -> dict[str, int]:
+    return {metric["metric_id"]: metric["current_value"] for metric in state["metrics"]}
+
+
+def test_no_matching_ending_returns_500_and_rolls_every_thing_back(
     api_client: TestClient, session_factory: sessionmaker[Session]
 ) -> None:
     public_id = _create_story(session_factory)
@@ -195,6 +199,12 @@ def test_no_matching_ending_returns_500_and_leaves_the_story_unfinished(
             ).status_code
             == 200
         )
+
+    # This is the only failure path that mutates metric/episode rows in memory
+    # *before* raising, so snapshot everything the write would have touched.
+    before_count = _change_count(session_factory)
+    before_state = _state(api_client, public_id)
+
     response = api_client.post(
         f"/api/stories/{public_id}/play", json={"choice_key": "e3_truth"}
     )
@@ -202,11 +212,15 @@ def test_no_matching_ending_returns_500_and_leaves_the_story_unfinished(
     assert response.status_code == 500
     body = response.json()
     assert body["code"] == 50001
-    state = _state(api_client, public_id)
-    assert state["status"] == "in_progress", "失败结局的事务必须整体回滚"
-    episodes = {episode["number"]: episode["status"] for episode in state["episodes"]}
-    assert episodes[3] == "in_progress"
-    assert episodes[2] == "completed"
+
+    after_state = _state(api_client, public_id)
+    assert after_state["status"] == "in_progress", "失败结局的事务必须整体回滚"
+    assert after_state["last_sequence"] == before_state["last_sequence"], "回滚后不能留下新事件"
+    assert _change_count(session_factory) == before_count, "回滚后事件日志行数必须不变"
+    assert _metrics(after_state) == _metrics(before_state), "回滚后指标必须不变"
+    after_episodes = {episode["number"]: episode["status"] for episode in after_state["episodes"]}
+    assert after_episodes[3] == "in_progress", "被回滚的那一集不能变成 completed"
+    assert after_episodes[2] == "completed"
 
 
 @pytest.mark.parametrize(

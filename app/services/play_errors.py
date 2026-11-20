@@ -3,8 +3,12 @@
 Same rule as :mod:`app.services.provider_errors`: the mapping lives in the
 service layer because it is product policy — which status and application code
 we expose for a given failure. :mod:`app.services.play_engine` stays unaware of
-HTTP, and this module is the only place these literals appear, so the route and
-the docs cannot drift apart.
+HTTP, and the **play-specific** codes below appear in no other module, so the
+route and its OpenAPI description cannot drift apart.
+
+``40401`` is deliberately *not* owned here: it is the existing "story not found"
+code already returned by ``app/api/stories.py``. Converging that literal is a
+separate change (recorded in ``docs/harness/progress.md`` as next-batch work).
 """
 
 from app.errors import AppError
@@ -24,7 +28,7 @@ PLAY_400_DESCRIPTION = (
 PLAY_404_DESCRIPTION = "Story not found (40401)"
 PLAY_409_DESCRIPTION = "The story has already finished (40901)"
 PLAY_500_DESCRIPTION = (
-    "No ending matches the final metric state (50001), or the archive could not be advanced (50002)"
+    "No ending matches the final metric state (50001); the archive was changed outside the API"
 )
 
 
@@ -53,4 +57,7 @@ def play_error_to_app_error(exc: PlayError) -> AppError:
             code=50001,
             status_code=500,
         )
+    # Defensive net for a future PlayError subclass. Unreachable today (the
+    # engine raises only the four subclasses above), so it is deliberately not
+    # advertised in PLAY_500_DESCRIPTION.
     return AppError("story could not be advanced", code=50002, status_code=500)

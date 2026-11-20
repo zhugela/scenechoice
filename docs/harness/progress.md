@@ -62,7 +62,21 @@
   - 推进接口不是幂等重放：客户端超时重试会多消耗一集（与 Session 009 记录的 POST 风险同类）。
   - 接口仍无鉴权与归属校验，`public_id` 就是能力凭据（Session 003/010 已记录，未变）。
   - `40401` 现有 3 处字面量（`stories.py` ×2 + `play_errors.py` ×1），下批收敛到 `app/errors.py` 常量。
-- 下一步最佳动作：负责人做 T1 读懂门三问；`sc-m2-07` 待 Codex 审查结论落地后置 passing。
+
+##### Codex 外部审查（第 4 步，`codex exec review`）
+
+结论：**零阻塞**。1 条 P2 + 2 条 P3 已按「阻塞必修、建议看代价」处理：
+
+| 级别 | 问题 | 处理 |
+|---|---|---|
+| P2 | 500 回滚测试只断言状态，未断言事件行数 / `last_sequence` / 指标 | **已修**：请求前后快照三者并逐一断言，用例改名为 `..._rolls_every_thing_back` |
+| P3 | `50002` 兜底码在本端点不可达，却被写进 OpenAPI 500 描述 | **已修**：描述只保留 `50001`；代码保留兜底并注明「未来子类的防御网」 |
+| P3 | 模块注释声称「错误码只出现在此」，但 `40401` 在 `stories.py` 仍有 2 处 | **已修**：注释限定为「play 专用码的单一来源」，并把 `40401` 收敛登记为下批工作 |
+
+- 补做的变异测试（证明新断言不是摆设）：在 `advance_story` 里插入 `session.commit()` 模拟「边推边存」的部分提交 bug → `5 failed, 6 passed`，其中 `test_no_matching_ending_returns_500_and_rolls_every_thing_back` 变红；还原后 sha256 前 16 位回到 `0a584642ce0c64e7`，`grep MUTATION` 零残留。
+- 复验：`pytest -q` → `179 passed, 1 warning in 6.62s`；`compileall` 通过。
+
+- 下一步最佳动作：负责人做 T1 读懂门三问（`PLAN.md` 第三节）；通过后把 `sc-m2-07` 置 passing，再开下一批（`40401` 收敛 + 鉴权/归属校验）。
 
 ### Session 012
 
