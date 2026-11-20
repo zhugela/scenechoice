@@ -18,6 +18,34 @@
 
 ## 会话记录
 
+### Session 016（M2 第 9 批：推进接口口径对齐）
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：把「旧版本存档」和「存档内部不一致」在推进接口上的口径，对齐到详情接口已经定好的 40902 / 50003；不开新玩法。
+- 执行方式：`PLAN.md` 写任务书 → Claude Code 一轮（2 分 16 秒）→ Hermes 独立复验 + 两次变异。
+- 基线：合并 master 后 `7c0ae28`，`.venv/Scripts/python.exe -m pytest -q` → `194 passed`。
+
+| 文件 | 改了什么 | 为什么这么改 |
+|---|---|---|
+| `app/services/play_engine.py` | 新增 `UnsupportedBlueprintVersion(PlayError)`；`advance_story` 取到 story 之后加 4 行版本闸；`advance_story` 的 docstring 补列这两个异常（docstring 由 Hermes 补，Claude Code 按「只加版本闸」的约束没敢动） | 推进链路原本完全不看 `blueprint_version`，同一个旧存档在详情接口被 40902 挡住、在推进接口照旧执行。**破例改引擎的理由**：替代方案是在路由里再查一次存档，那会把「按 public_id 取存档」拆成两处，第二个取数点将来照样漂移 |
+| `app/services/play_errors.py` | `UnsupportedBlueprintVersion → 409/40902`；`BrokenBlueprint → 500/50003`；两条 OpenAPI 描述同步写清四个码 | master 的引擎会抛 `BrokenBlueprint`（选项引用不存在的指标），此前没有映射，落进 50002 兜底网，玩家看到的是「story could not be advanced」，等于把「存档坏了」伪装成「未知故障」 |
+| `tests/test_play_api.py`（只追加） | 3 条：旧版本推进 → 409/40902 且零写入；选项引用 ghost 指标 → 500/50003（显式断言不是 50002）；OpenAPI 描述含 40902/50003 | 前两条各守一条新分支；第三条守文档口径不漂 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`197 passed, 1 warning in 7.31s`（基线 194，净增 3）
+  - `compileall app tests` → 通过
+  - **变异 F**（版本闸改 `if False:`）→ `1 failed`，红的正是 `test_old_blueprint_version_returns_409_40902_and_writes_nothing`
+  - **变异 G**（`BrokenBlueprint` 分支短路）→ `1 failed`，红的正是 `test_broken_choice_effect_returns_500_50003_instead_of_the_fallback`
+  - 两次还原后 `grep MUTATION` 零残留，复跑 197 passed
+  - `git diff app/services/play_engine.py`：只有 import 一行 + 异常类 6 行 + 版本闸 7 行 + docstring 3 行
+  - 禁改比对（`app/schemas`、`blueprint_validator.py`、`conditions.py`、`app/models`、`alembic`、`requirements.txt`、`tests/test_play_engine*.py`）→ 空
+- 已知风险：
+  - `play_engine` 现在 import `story_store`（只为一个常量），模块加载变重；目前无环（store 不 import engine），但**没有测试守着这个方向**，将来谁在 store 里 import engine 就会当场炸——上策是把 `BLUEPRINT_VERSION` 挪到中立模块，留给下一批。
+  - 版本闸现在有**两处**（详情接口一处、推进引擎一处），同一个常量同一个码，但缺一条「双端一致性」测试（第 6 批给 provider 错误矩阵做过同类网）——下一批补。
+  - `BrokenBlueprint` 与 `BlueprintCorruptedError` 共用 50003，但两条消息不同（`cannot be opened` / `cannot be advanced`）；这是有意的：码表示「存档坏了」，消息说清坏在哪个动作上。
+  - **读懂门队列已经 3 批（7、8、9）**，按 playbook R7 都不该在答完前继续叠加新功能。
+- 下一步最佳动作：不再开新功能。批次 10 只做「不加新用户可见行为」的收尾：`save_blueprint` 的 savepoint 三条测试、`provider_errors` 里 `42201/502xx/503xx` 字面量收敛、双端版本闸一致性测试。
+
 ### Session 015（合并 origin/master，解 PR #6 冲突）
 
 - 触发：PR #6 建好后 GitHub 报 `CONFLICTING`。原因是 master 上另有两条线先落地——批次 6 的错误映射收敛（`55fd3cf` / `a77d599`）与 M3 选择执行引擎（`057a1f0` / `eac0a6d` / `50bc9ff`，经 PR #5 合入）。其中 M3 引擎与本分支 `b6d89c9` 的「play engine 服务层回滚点」是同一条河的两次改道。

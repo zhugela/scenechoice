@@ -178,7 +178,28 @@
         "2026-11-20 Codex 外部审查（`codex exec review --uncommitted`）：overall_correctness = patch is correct；4 条（1 P2 真漏洞 + 1 P2 harness 规则 + 2 P3），已全部处理或登记",
         "2026-11-20 禁改比对 git diff --stat（schema/validator/play_engine/conditions/alembic/requirements）→ 空；tests/test_stories_api.py 只有追加无删除行"
       ],
-      "notes": "由 Claude Code 四轮实现（第一轮只捕 ValidationError 被探针打回；第三轮补 list 形状检查 + OpenAPI 500；第四轮把非法 JSON 的 JSONDecodeError 也收进 50003），Hermes 独立复验 + 五次变异。状态为 blocked：唯一阻塞是负责人第 8 批读懂门三问未答（R7）。未做：secret/conditions 下发与 ownership（等负责人选方案）、savepoint 三条测试、provider_errors 里 42201/502xx 字面量收敛、推进接口的版本校验。"
+      "notes": "由 Claude Code 四轮实现（第一轮只捕 ValidationError 被探针打回；第三轮补 list 形状检查 + OpenAPI 500；第四轮把非法 JSON 的 JSONDecodeError 也收进 50003），Hermes 独立复验 + 五次变异。状态为 blocked：唯一阻塞是负责人第 8 批读懂门三问未答（R7）。未做：secret/conditions 下发与 ownership（等负责人选方案）、savepoint 三条测试、provider_errors 里 42201/502xx 字面量收敛、推进接口的版本校验（已由批次 9 补上）。"
+    },
+    {
+      "id": "sc-m2-09",
+      "priority": 10,
+      "area": "m2-play-loop",
+      "title": "推进接口与详情接口的口径对齐（版本闸 + 拆蓝图异常映射）",
+      "user_visible_behavior": "同一份旧版本存档，在详情接口和推进接口都被同一个 409/40902 挡住；存档内部不一致（如选项引用不存在的指标）时推进接口返回 500/50003，不再含糊地报 50002。",
+      "status": "blocked",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests",
+        "git diff --stat app/schemas app/services/blueprint_validator.py app/services/conditions.py app/models alembic requirements.txt tests/test_play_engine.py tests/test_play_engine_transaction.py"
+      ],
+      "evidence": [
+        "2026-11-20 基线：合并 master 后 `7c0ae28` → 194 passed",
+        "2026-11-20 收工 `.venv/Scripts/python.exe -m pytest -q` → 197 passed, 1 warning in 7.31s（净增 3）",
+        "2026-11-20 新增用例：test_old_blueprint_version_returns_409_40902_and_writes_nothing、test_broken_choice_effect_returns_500_50003_instead_of_the_fallback、test_openapi_documents_version_and_corruption_codes",
+        "2026-11-20 变异 F（版本闸改 if False）→ 1 failed（旧版本用例）；变异 G（BrokenBlueprint 分支短路）→ 1 failed（损坏用例）；还原后零残留、复跑 197 passed",
+        "2026-11-20 `git diff app/services/play_engine.py` 只有 import 1 行 + 异常类 6 行 + 版本闸 7 行 + docstring 3 行；禁改清单 diff 为空"
+      ],
+      "notes": "状态 blocked：卡在负责人读懂门（R7），且读懂门队列已有 3 批（sc-m2-07/08/09）。遗留：BLUEPRINT_VERSION 宜挪到中立模块（现由 play_engine import story_store，方向无测试守）；版本闸两处缺「双端一致性」测试；下一批做纯测试/收敛，不加新用户可见行为。"
     }
   ]
 }

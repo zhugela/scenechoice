@@ -7,17 +7,18 @@ a stable code, and a rejected action writes nothing.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, delete, event, func, select
+from sqlalchemy import create_engine, delete, event, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.dependencies import get_db_session
 from app.main import create_app
-from app.models import Base, Ending, StoryStateChange
+from app.models import Base, Ending, Story, StoryStateChange
 from app.schemas.story_blueprint import StoryBlueprint
 from app.services.story_store import save_blueprint
 from tests.blueprint_factory import valid_blueprint_data
@@ -250,3 +251,94 @@ def test_openapi_documents_the_play_contract(api_client: TestClient) -> None:
     assert "40401" in path["responses"]["404"]["description"]
     assert "40901" in path["responses"]["409"]["description"]
     assert "50001" in path["responses"]["500"]["description"]
+
+
+def test_old_blueprint_version_returns_409_40902_and_writes_nothing(
+    api_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """详情接口挡住的旧存档，推进接口必须用同一个 409/40902 挡住。"""
+    public_id = _create_story(session_factory)
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE stories SET blueprint_version = 0 "
+                "WHERE public_id = :public_id"
+            ),
+            {"public_id": public_id},
+        )
+        session.commit()
+
+    with session_factory() as session:
+        before_stories = session.scalar(select(func.count()).select_from(Story))
+    before_changes = _change_count(session_factory)
+
+    response = api_client.post(
+        f"/api/stories/{public_id}/play", json={"choice_key": "e1_truth"}
+    )
+
+    body = response.json()
+    assert response.status_code == 409
+    assert body["code"] == 40902
+    assert "blueprint version 0" in body["message"]
+    assert "supports version 1" in body["message"]
+
+    with session_factory() as session:
+        after_stories = session.scalar(select(func.count()).select_from(Story))
+        status = session.scalar(
+            select(Story.status).where(Story.public_id == public_id)
+        )
+    assert after_stories == before_stories, "被版本闸拒绝的推进不能新增故事行"
+    assert _change_count(session_factory) == before_changes, "被版本闸拒绝的推进不能新增事件"
+    assert status == "ready", "版本闸必须在任何写入之前拦住"
+
+
+def test_broken_choice_effect_returns_500_50003_instead_of_the_fallback(
+    api_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """存档内部不一致（选项引用不存在的指标）应报 50003，而不是含糊的 50002。"""
+    public_id = _create_story(session_factory)
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE choices SET effects = :effects "
+                "WHERE key = 'e1_truth' AND episode_id = ("
+                "SELECT episodes.id FROM episodes "
+                "JOIN stories ON stories.id = episodes.story_id "
+                "WHERE stories.public_id = :public_id AND episodes.number = 1)"
+            ),
+            {
+                "effects": json.dumps([{"metric_key": "ghost", "delta": 12}]),
+                "public_id": public_id,
+            },
+        )
+        session.commit()
+
+    before_changes = _change_count(session_factory)
+
+    response = api_client.post(
+        f"/api/stories/{public_id}/play", json={"choice_key": "e1_truth"}
+    )
+
+    body = response.json()
+    assert response.status_code == 500
+    assert body["code"] == 50003
+    assert body["code"] != 50002
+    assert "corrupted" in body["message"]
+
+    assert _change_count(session_factory) == before_changes, "存档损坏导致的失败不能留下半截事件"
+    with session_factory() as session:
+        status = session.scalar(
+            select(Story.status).where(Story.public_id == public_id)
+        )
+    assert status == "ready", "损坏导致的失败必须整体回滚"
+
+
+def test_openapi_documents_version_and_corruption_codes(
+    api_client: TestClient,
+) -> None:
+    """U2 改写了两条描述；没有这条断言，40902/50003 的文档口径会再次漂移。"""
+    schema = api_client.get("/openapi.json").json()
+
+    responses = schema["paths"]["/api/stories/{public_id}/play"]["post"]["responses"]
+    assert "40902" in responses["409"]["description"]
+    assert "50003" in responses["500"]["description"]

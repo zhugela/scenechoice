@@ -29,6 +29,7 @@ from app.models import (
     StoryStatus,
 )
 from app.services.conditions import clamp_metric, conditions_all_match
+from app.services.story_store import BLUEPRINT_VERSION
 
 FINISHED_STATUSES = (StoryStatus.COMPLETED.value, StoryStatus.ABANDONED.value)
 
@@ -50,6 +51,12 @@ class StoryNotFound(PlayError):
 
 class StoryFinished(PlayError):
     code = "story_finished"
+
+
+class UnsupportedBlueprintVersion(PlayError):
+    """The stored archive was produced by a blueprint contract this server cannot play."""
+
+    code = "story_version_unsupported"
 
 
 class ChoiceNotInCurrentEpisode(PlayError):
@@ -138,8 +145,9 @@ def _change(
 def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutcome:
     """Apply one choice to a story archive, in one transaction.
 
-    Raises :class:`StoryNotFound`, :class:`StoryFinished`,
-    :class:`ChoiceNotInCurrentEpisode` or :class:`NoMatchingEnding`; nothing is
+    Raises :class:`StoryNotFound`, :class:`UnsupportedBlueprintVersion`,
+    :class:`StoryFinished`, :class:`ChoiceNotInCurrentEpisode`,
+    :class:`NoMatchingEnding` or :class:`BrokenBlueprint`; nothing is
     written when one of them is raised.
     """
     story = session.scalar(
@@ -153,6 +161,13 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
     )
     if story is None:
         raise StoryNotFound("story not found", public_id=public_id)
+    if story.blueprint_version != BLUEPRINT_VERSION:
+        raise UnsupportedBlueprintVersion(
+            f"this story archive uses blueprint version {story.blueprint_version}; "
+            f"this server supports version {BLUEPRINT_VERSION}",
+            stored=story.blueprint_version,
+            supported=BLUEPRINT_VERSION,
+        )
     if story.status in FINISHED_STATUSES:
         raise StoryFinished("story already finished", status=story.status)
 

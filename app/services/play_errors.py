@@ -16,15 +16,19 @@ from app.errors import (
     NO_MATCHING_ENDING,
     PLAY_ADVANCE_FALLBACK,
     PLAY_CHOICE_NOT_IN_EPISODE,
+    STORY_ARCHIVE_CORRUPTED,
     STORY_FINISHED,
     STORY_NOT_FOUND,
+    STORY_VERSION_UNSUPPORTED,
 )
 from app.services.play_engine import (
+    BrokenBlueprint,
     ChoiceNotInCurrentEpisode,
     NoMatchingEnding,
     PlayError,
     StoryFinished,
     StoryNotFound,
+    UnsupportedBlueprintVersion,
 )
 
 # OpenAPI descriptions live next to the mapping for the same reason they do in
@@ -33,9 +37,13 @@ PLAY_400_DESCRIPTION = (
     "The submitted choice does not belong to the episode being played (40001)"
 )
 PLAY_404_DESCRIPTION = "Story not found (40401)"
-PLAY_409_DESCRIPTION = "The story has already finished (40901)"
+PLAY_409_DESCRIPTION = (
+    "The story has already finished (40901); the archive uses an unsupported "
+    "blueprint version (40902)"
+)
 PLAY_500_DESCRIPTION = (
-    "No ending matches the final metric state (50001); the archive was changed outside the API"
+    "No ending matches the final metric state (50001); the story archive is "
+    "corrupted (50003)"
 )
 
 
@@ -50,6 +58,15 @@ def play_error_to_app_error(exc: PlayError) -> AppError:
     if isinstance(exc, StoryFinished):
         return AppError(
             "story has already finished", code=STORY_FINISHED, status_code=409
+        )
+    if isinstance(exc, UnsupportedBlueprintVersion):
+        # Same archive contract check the detail endpoint applies: the request
+        # is valid, the archive is simply not playable by this server.
+        return AppError(
+            f"this story archive uses blueprint version {exc.details.get('stored')}; "
+            f"this server supports version {exc.details.get('supported')}",
+            code=STORY_VERSION_UNSUPPORTED,
+            status_code=409,
         )
     if isinstance(exc, ChoiceNotInCurrentEpisode):
         return AppError(
@@ -66,8 +83,17 @@ def play_error_to_app_error(exc: PlayError) -> AppError:
             code=NO_MATCHING_ENDING,
             status_code=500,
         )
+    if isinstance(exc, BrokenBlueprint):
+        # Internal inconsistency the validator should have caught (for example
+        # a choice referencing a metric that no longer exists) can only come
+        # from a write outside the API, so it is an archive fault like 50003.
+        return AppError(
+            "this story archive is corrupted and cannot be advanced",
+            code=STORY_ARCHIVE_CORRUPTED,
+            status_code=500,
+        )
     # Defensive net for a future PlayError subclass. Unreachable today (the
-    # engine raises only the four subclasses above), so it is deliberately not
+    # engine raises only the subclasses above), so it is deliberately not
     # advertised in PLAY_500_DESCRIPTION.
     return AppError(
         "story could not be advanced",
