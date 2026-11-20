@@ -1,100 +1,81 @@
-# PLAN — M2 第 7 批：把「玩家推进」从服务层接到 HTTP 层
+# PLAN — M2 第 8 批：存档载入的版本契约 + 业务错误码单一来源
 
-> 上一份 PLAN（M2 第 6 批：上游错误映射收敛）已随提交 `d39759d` 落地，归档在
-> `docs/exec-plans/completed/PLAN-m2-batch6-error-mapping.md`。
-> 本批来源：工作区里已存在、但**没有任务书、没有 HTTP 出口**的那三个新文件。
-> 本批**只做推进链路的收口**，不开新玩法。
-> 本批起提交动作由 Hermes 执行（见 `docs/harness/agent-loop-playbook.md` R8）。
+> 上一份任务书（第 7 批：玩家推进接 HTTP）已归档到
+> `docs/exec-plans/active/PLAN-m2-batch7-play-http-endpoint.md` —— 那里仍挂着 `sc-m2-07`
+> 的负责人读懂门（T1 三问），本批不动它，也不在 play 链路上叠加新东西。
+> 本批来源：`docs/harness/reviews/latest.md` 剩下的 P2 + `progress.md` Session 013 登记的
+> 「下批收敛 40401」。
+> 本批提交动作由 Hermes 执行（`docs/harness/agent-loop-playbook.md` R8）。
 
 ## 一、现状事实（已实测，别重新推理）
 
 | 事实 | 证据 |
 |---|---|
-| `app/services/play_engine.py` 261 行，`advance_story()` 是唯一的推进入口 | 文件已读 |
-| `app/services/conditions.py` 73 行，供 validator 与 play_engine 共用求值逻辑 | `blueprint_validator.py:5` 已 import |
-| `tests/test_play_engine.py` 238 行 / 10 条测试，全绿 | 2026-11-20 Hermes 实跑 `168 passed, 1 warning in 6.37s`（第 6 批收工时是 158） |
-| **`advance_story()` 零调用方**：除测试文件外无人 import | `grep -rn "play_engine" app/ tests/` 只命中 `tests/test_play_engine.py` |
-| **没有任何推进端点**：现有路由只有 stories ×4 + story_plans ×1 | `grep -rn "@router\." app/api/` |
-| 本批此前无任务书、无 `progress.md` 记录、`feature_list.json` 无对应条目 | 三份文件均已核对 |
+| `blueprint_version` 只建列不读写 | `app/models/story.py:73` 只有 `default=1`；`grep -rn "blueprint_version" app/ tests/ alembic/` 除模型/迁移/测试建表语句外零命中 |
+| 载入时既不比版本、也不兜形状错误 | `app/services/story_store.py:189` 裸 `StoryBlueprint(...)`；`app/middleware.py:25-31` 把任何异常兜成 `500 internal server error` |
+| `40401` 有 3 处字面量 | `app/api/stories.py:137`、`:182`、`app/services/play_errors.py:42` |
+| 基线 | 2026-11-20 `./docs/harness/init.sh` → `179 passed, 1 warning in 6.69s` |
+| 旧版本存档 / 损坏存档的 API 路径零测试 | `grep -n "blueprint_version" tests/` 只命中 `test_migrations.py` 的建表 SQL |
 
-**结论：这是一个"写了一半"的功能。** 服务层能算、能写事件日志、能判结局，但玩家在界面上没有任何地方能触发它。负责人早上的检查方式（看前后端功能有没有实现）会被这一条卡住，所以本批第一件事就是把这件事说清。
+**结论**：现在把一份旧形状存档交给 `GET /api/stories/{public_id}`，玩家看到的是
+`500 internal server error`。既不能区分「旧版本」和「数据被改坏」，也没有任何修复指引。
 
-## 二、待负责人一句话确认的越界改动
+## 二、本批做什么（两个单元，按序做完一个再动下一个）
 
-工作区 `app/services/blueprint_validator.py` 被改了 **3 行 / 删 7 行**：
-`_condition_matches()` 不再自己写五分支字典，改为转发到 `app/services/conditions.py` 的 `condition_matches()`。
+### U1 版本契约（主功能）
 
-- 行为等价：`168 passed`（含 validator 的 30 条历史用例）
-- 与上一批 `provider_errors.py` 属同一类收敛：同一份知识只留一处
-- 但这文件在历次收工记录里都出现在**禁改清单**里
+- `app/services/story_store.py` 新增模块常量 `BLUEPRINT_VERSION = 1`：它描述「当前这份
+  Pydantic 计划 schema 会长出什么样的行」，所以跟着映射代码放，不放进被禁改的 schema 文件。
+- `save_blueprint` 落库时**显式**写 `blueprint_version=BLUEPRINT_VERSION`（不吃列默认值）。
+- `load_blueprint` 先比版本：不相等 → 抛新异常 `BlueprintVersionError(stored, supported)`。
+- 重建 `StoryBlueprint(...)` 时捕 `pydantic.ValidationError` → 抛 `BlueprintCorruptedError`。
+- 路由映射（`app/api/stories.py`，与既有 `BlueprintStorageError -> 42201` 同一写法）：
 
-→ Hermes 建议**保留**。负责人确认保留则记为已批准；不确认则在 T3 随本批一起回退这一处。
-
-## 三、任务（按序执行，一次只做一件）
-
-### T1 读懂门（负责人做，Hermes 只挑错、不代答）
-
-`advance_story()` 是本项目的核心玩法执行器。在它接上 HTTP 之前，负责人必须能脱稿说清：
-
-1. 玩家选了一个「不属于当前这一集」的选项时，会发生什么？数据库里会不会留下半条记录？
-2. 玩家的两次选择之间，谁决定「现在该玩第几集」？如果库里被手工改成两集都是 `in_progress`，代码挑哪一集？
-3. 某个选项写 `delta: +80`、当前值是 50，结果是多少？为什么不是 130？
-
-三问答完、Hermes 挑完错，才进 T2。
-
-### T2 定 URL 形态（两个方案，负责人选）
-
-| 方案 | 形态 | 优点 | 缺点 |
+| 异常 | HTTP | 业务码 | 为什么 |
 |---|---|---|---|
-| **A（推荐）** | `POST /api/stories/{public_id}/play`，body `{"choice_key": "..."}` | 名词清楚；以后加「回退一步」「跳过本集」都是同一资源的动作 | URL 不带剧集号，跨集判断只能靠服务层 |
-| B | `POST /api/stories/{public_id}/episodes/{number}/choices/{choice_key}` | 语义最直白，天生拒绝跨集选错 | URL 长；换集逻辑散到路由层；每加一个动作要新开路径 |
+| `BlueprintVersionError` | 409 | 40902 | 请求本身合法，是存档与当前契约不兼容 —— 冲突，不是客户端写错 |
+| `BlueprintCorruptedError` | 500 | 50003 | 库被 API 之外改坏 = 服务端故障，不装成 4xx |
 
-### T3 实现端点（Claude Code）
+- OpenAPI 给 `GET /api/stories/{public_id}` 补 409 描述，文字与码一致。
 
-- 新增 `app/api/play.py`（或并入 `stories.py`，由 T2 结果决定），挂到 `app/main.py`
-- 复用 `get_db_session`；单事务；**不新增依赖**
-- 响应体用 `PlayOutcome` 的字段显式拼，不直接 `return` dataclass
+### U2 业务错误码单一来源
 
-### T4 错误映射（单一事实来源）
+- `app/errors.py` 新增常量：`STORY_NOT_FOUND=40401`、`PLAY_CHOICE_NOT_IN_EPISODE=40001`、
+  `STORY_FINISHED=40901`、`STORY_VERSION_UNSUPPORTED=40902`、`NO_MATCHING_ENDING=50001`、
+  `PLAY_ADVANCE_FALLBACK=50002`、`STORY_ARCHIVE_CORRUPTED=50003`，并注明「状态码 ×100 + 序号」。
+- `app/api/stories.py`、`app/services/play_errors.py` 改为引用常量；**行为零变化**，
+  OpenAPI 描述里给人看的数字照旧保留。
+- 同步改 `play_errors.py` 顶部注释：单一来源从「本模块」上移到 `app/errors.py`。
 
-`PlayError` 四个子类 → `AppError`，**只允许写在一处**（与 `provider_errors.py` 同一哲学）：
+## 三、测试（只新增，不改任何已有用例的预期）
 
-| 异常 | HTTP | 业务码 | 触发条件 |
-|---|---|---|---|
-| `StoryNotFound` | 404 | 沿用既有 40401 | public_id 不存在 |
-| `StoryFinished` | 409 | 本批新定 | 故事已 completed / abandoned |
-| `ChoiceNotInCurrentEpisode` | 400 | 本批新定 | 选项不属于当前集 |
-| `NoMatchingEnding` | 500 | 本批新定 | 蓝图通过可达性校验后仍无结局 = 数据被手改 |
-
-新业务码先在任务书里定好数字再写代码，不许边写边取。
-
-### T5 测试（正常 1 条 + 失败 4 条 + 1 条事件可见）
-
-- 正常：创建 → 连推到结局；`GET /api/stories/{id}/state` 能读到 `last_sequence` 增长
-- 失败：404 / 已结局 / 跨集选错（断言**库内零新增行**）/ 无匹配结局
-- 事件可见：推进后 `GET .../state` 的最近变化里出现 `choice_selected` 与 `metric_changed`
-
-### T6 复验（Hermes，不采信任何 agent 自述）
-
-- 全量 `pytest -q`，数字必须 ≥ 176（168 + 新增 ≥8）
-- 变异测试：把 `_next_sequence` 的 `(last or 0) + 1` 改成 `(last or 0)` → 必须有测试变红，恢复后全绿
-- 禁改比对：`app/schemas/story_blueprint.py`、`alembic/versions/`、已有测试预期零改动
-
-### T7 落盘（Hermes）
-
-`docs/harness/progress.md` 新增 Session 013；`feature_list.json` 新增 `sc-m2-07`，`passing` 必须带本轮真实数字。
+1. `save_blueprint` 后直接查库列，`stories.blueprint_version == 1`。
+2. 存好后 `UPDATE stories SET blueprint_version=0` → `GET /api/stories/{public_id}` →
+   `409` + `40902`，message 是人话（不是 `internal server error`）。
+3. 存好后把某个 JSON 列改成坏形状（例如把 `characters.personality` 写成字符串）→ 同端点 →
+   `500` + `50003`。用例里要断言「这不再是裸 500/500」。
+4. 既有 179 条必须全绿，一条预期都不许改。
 
 ## 四、禁改清单（本批）
 
 - `app/schemas/story_blueprint.py`
-- `app/services/blueprint_validator.py`（除第二节那处待确认的转发，不再动）
-- `alembic/versions/` 下任何已发布迁移
+- `app/services/blueprint_validator.py`、`app/services/play_engine.py`、`app/services/conditions.py`
+- `alembic/versions/` 下任何已发布迁移（本批**不需要**迁移：列已存在）
 - 任何已有测试的预期结果
-- M1 阶段门与 `sc-m1-03` 状态
+- `requirements.txt`（不新增依赖）
+- M1 阶段门、`sc-m1-03`、`sc-m2-07` 的状态
 
-## 五、验收标准（负责人视角，不需要读代码）
+## 五、非目标（本批明确不做，登记在案）
 
-1. 能一句话说清：**玩家在哪个 URL 做什么动作，返回什么**
-2. 有一个真实可调的端点，正常路径与至少一条失败路径各有测试证据
-3. 全量测试数字从 168 涨上去，且没有任何一条老测试被改预期
-4. 负责人能脱稿答出 T1 的三问
+| 项 | 为什么不做 |
+|---|---|
+| 角色 `secret` / 结局 `conditions` 是否下发、`public_id` 要不要 ownership 校验 | 两类方案（能力链接 vs 归属校验）各有代价，属产品决定，要负责人点头（playbook 第四节第 3 类） |
+| `save_blueprint` 的 savepoint 三条测试 | 纯测试补充，留给下一批，避免本批同时改实现和补第三批入口的网 |
+| WAL / `busy_timeout` / 幂等键 / 生成元信息落库 | 全是评审 P3，M3 前统一处理 |
+
+## 六、验收标准（负责人视角，不需要读代码）
+
+1. 一句话能说清：**拿一份旧版本存档的链接去请求，看到的是 409 + 40902 的人话提示，不再是 500。**
+2. 全量 `pytest -q` 从 179 涨到 ≥182，且没有任何一条老用例被改预期。
+3. 变异测试：把版本比较改成恒真 → 版本用例必须变红；还原后全绿。
+4. 禁改清单文件 `git diff --stat` 为空。

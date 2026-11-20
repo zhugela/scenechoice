@@ -3,15 +3,22 @@
 Same rule as :mod:`app.services.provider_errors`: the mapping lives in the
 service layer because it is product policy — which status and application code
 we expose for a given failure. :mod:`app.services.play_engine` stays unaware of
-HTTP, and the **play-specific** codes below appear in no other module, so the
-route and its OpenAPI description cannot drift apart.
+HTTP.
 
-``40401`` is deliberately *not* owned here: it is the existing "story not found"
-code already returned by ``app/api/stories.py``. Converging that literal is a
-separate change (recorded in ``docs/harness/progress.md`` as next-batch work).
+The codes this module returns come from :mod:`app.errors`, so the codes shared
+across modules have one definition; this module only decides which code and
+status a given engine failure maps to. OpenAPI descriptions keep the
+human-readable numbers so the route and its documentation cannot drift apart.
 """
 
-from app.errors import AppError
+from app.errors import (
+    AppError,
+    NO_MATCHING_ENDING,
+    PLAY_ADVANCE_FALLBACK,
+    PLAY_CHOICE_NOT_IN_EPISODE,
+    STORY_FINISHED,
+    STORY_NOT_FOUND,
+)
 from app.services.play_engine import (
     ChoiceNotInCurrentEpisode,
     NoMatchingEnding,
@@ -39,13 +46,15 @@ def play_error_to_app_error(exc: PlayError) -> AppError:
     original engine error stays attached as ``__cause__``.
     """
     if isinstance(exc, StoryNotFound):
-        return AppError("story not found", code=40401, status_code=404)
+        return AppError("story not found", code=STORY_NOT_FOUND, status_code=404)
     if isinstance(exc, StoryFinished):
-        return AppError("story has already finished", code=40901, status_code=409)
+        return AppError(
+            "story has already finished", code=STORY_FINISHED, status_code=409
+        )
     if isinstance(exc, ChoiceNotInCurrentEpisode):
         return AppError(
             "choice does not belong to the episode being played",
-            code=40001,
+            code=PLAY_CHOICE_NOT_IN_EPISODE,
             status_code=400,
         )
     if isinstance(exc, NoMatchingEnding):
@@ -54,10 +63,14 @@ def play_error_to_app_error(exc: PlayError) -> AppError:
         # player's mistake. Do not pretend it is a 4xx.
         return AppError(
             "no ending matches the final metric state",
-            code=50001,
+            code=NO_MATCHING_ENDING,
             status_code=500,
         )
     # Defensive net for a future PlayError subclass. Unreachable today (the
     # engine raises only the four subclasses above), so it is deliberately not
     # advertised in PLAY_500_DESCRIPTION.
-    return AppError("story could not be advanced", code=50002, status_code=500)
+    return AppError(
+        "story could not be advanced",
+        code=PLAY_ADVANCE_FALLBACK,
+        status_code=500,
+    )

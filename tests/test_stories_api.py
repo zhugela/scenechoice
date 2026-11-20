@@ -28,6 +28,7 @@ from app.schemas.stories import CreateStoryRequest
 from app.schemas.story_blueprint import StoryBlueprint
 from app.services.story_planner import StoryPlanner, StoryPlanningError
 from app.services.story_store import (
+    BLUEPRINT_VERSION,
     BlueprintStorageError,
     list_stories,
     load_blueprint,
@@ -532,3 +533,222 @@ def test_story_endpoints_are_present_in_openapi(api_client: TestClient) -> None:
     assert paths["/api/stories/{public_id}/state"]["get"]["responses"]["200"][
         "content"
     ]["application/json"]["schema"]["$ref"].endswith("/StoryStateResponse")
+
+
+def test_save_blueprint_writes_explicit_blueprint_version(
+    session_factory: sessionmaker[Session],
+) -> None:
+    blueprint = StoryBlueprint.model_validate(valid_blueprint_data())
+
+    with session_factory() as session:
+        story = save_blueprint(session, blueprint)
+        public_id = story.public_id
+
+    with session_factory() as session:
+        stored_version = session.scalar(
+            text(
+                "SELECT blueprint_version FROM stories WHERE public_id = :public_id"
+            ),
+            {"public_id": public_id},
+        )
+
+    assert BLUEPRINT_VERSION == 1
+    assert stored_version == BLUEPRINT_VERSION
+
+
+def test_get_story_with_unsupported_blueprint_version_returns_409_40902(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE stories SET blueprint_version = 0 "
+                "WHERE public_id = :public_id"
+            ),
+            {"public_id": created["public_id"]},
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/stories/{created['public_id']}")
+
+    body = response.json()
+    assert response.status_code == 409
+    assert body["code"] == 40902
+    assert body["message"] != "internal server error"
+    assert "blueprint version 0" in body["message"]
+    assert "supports version 1" in body["message"]
+
+
+def test_get_story_with_corrupted_blueprint_returns_500_50003(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE characters SET personality = :personality "
+                "WHERE story_id = "
+                "(SELECT id FROM stories WHERE public_id = :public_id) "
+                "AND key = 'anchor'"
+            ),
+            {"personality": "[1, 2, 3]", "public_id": created["public_id"]},
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/stories/{created['public_id']}")
+
+    body = response.json()
+    assert response.status_code == 500
+    # Not the anonymous fallback: the archive fault is named in the contract.
+    assert body["code"] == 50003
+    assert body["code"] != 500
+    assert body["message"] != "internal server error"
+    assert "corrupted" in body["message"]
+
+
+@pytest.mark.parametrize(
+    ("corrupt_sql", "corrupt_value"),
+    [
+        (
+            "UPDATE endings SET conditions = :value WHERE story_id = "
+            "(SELECT id FROM stories WHERE public_id = :public_id)",
+            '"oops"',
+        ),
+        (
+            "UPDATE choices SET effects = :value WHERE episode_id IN "
+            "(SELECT id FROM episodes WHERE story_id = "
+            "(SELECT id FROM stories WHERE public_id = :public_id))",
+            '[{"delta": 12}]',
+        ),
+    ],
+    ids=["endings_conditions_string", "choices_effects_missing_metric_key"],
+)
+def test_get_story_with_unpackable_json_columns_returns_500_50003(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+    corrupt_sql: str,
+    corrupt_value: str,
+) -> None:
+    """Shapes pydantic alone does not catch must still surface as 50003.
+
+    Both cases load as valid JSON and only fail while the rebuild code unpacks
+    fields: indexing a string raises TypeError, a missing mapping key raises
+    KeyError. Neither may escape as a bare 500 or an exception from the route.
+    """
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    with session_factory() as session:
+        session.execute(
+            text(corrupt_sql),
+            {"value": corrupt_value, "public_id": created["public_id"]},
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/stories/{created['public_id']}")
+
+    body = response.json()
+    assert response.status_code == 500
+    assert body["code"] == 50003
+    assert body["code"] != 500
+    assert body["message"] != "internal server error"
+    assert "corrupted" in body["message"]
+
+
+def test_get_story_with_scalar_json_personality_returns_500_50003(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    """``list("abc")`` would silently rewrite the column instead of failing.
+
+    The column holds a JSON string rather than an array, so ``list()`` would
+    hand pydantic ``["a", "b", "c"]`` and the detail endpoint would answer 200
+    with mangled data. It must surface as the named archive-corruption fault.
+    """
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE characters SET personality = :personality "
+                "WHERE story_id = "
+                "(SELECT id FROM stories WHERE public_id = :public_id) "
+                "AND key = 'anchor'"
+            ),
+            {"personality": '"abc"', "public_id": created["public_id"]},
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/stories/{created['public_id']}")
+
+    body = response.json()
+    assert response.status_code != 200
+    assert response.status_code == 500
+    assert body["code"] == 50003
+    assert "corrupted" in body["message"]
+
+
+def test_get_story_with_corrupt_invalid_json_personality_returns_500_50003(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    """SQLite does not enforce JSON validity, so bare text must still be 50003.
+
+    ``UPDATE characters SET personality = 'abc'`` stores invalid JSON, and
+    SQLAlchemy raises ``json.JSONDecodeError`` while ``load_blueprint`` is
+    still materialising rows, before ``_require_string_list`` can inspect the
+    value. That path must inherit the same archive-corruption contract instead
+    of escaping as an anonymous 500.
+    """
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE characters SET personality = :personality "
+                "WHERE story_id = "
+                "(SELECT id FROM stories WHERE public_id = :public_id) "
+                "AND key = 'anchor'"
+            ),
+            {"personality": "abc", "public_id": created["public_id"]},
+        )
+        session.commit()
+
+    response = api_client.get(f"/api/stories/{created['public_id']}")
+
+    body = response.json()
+    assert response.status_code != 200
+    assert response.status_code == 500
+    assert body["code"] == 50003
+    assert body["code"] != 500
+    assert body["message"] != "internal server error"
+    assert "corrupted" in body["message"]
+
+
+def test_get_story_openapi_declares_archive_corruption_500(
+    api_client: TestClient,
+) -> None:
+    schema = api_client.get("/openapi.json").json()
+    responses = schema["paths"]["/api/stories/{public_id}"]["get"]["responses"]
+
+    assert "500" in responses
+    assert "50003" in responses["500"]["description"]

@@ -140,7 +140,7 @@
       "area": "m2-play-loop",
       "title": "玩家推进从服务层接到 HTTP 层",
       "user_visible_behavior": "玩家对一个存档提交一个选项，服务端在同一事务里改指标、推进剧集、判定结局并写事件日志，返回当前状态；跨集选错、已结局、存档不存在各有明确错误码。",
-      "status": "in_progress",
+      "status": "blocked",
       "verification": [
         ".venv/Scripts/python.exe -m pytest -q",
         "存在可调用的推进端点，且 GET /api/stories/{public_id}/state 能看到 last_sequence 增长"
@@ -155,7 +155,30 @@
         "2026-11-20 Codex 外部审查 `codex exec review`：零阻塞，1 条 P2（500 回滚测试断言不全）+ 2 条 P3 已修",
         "2026-11-20 变异 3：`advance_story` 插入 `session.commit()` 模拟部分提交 → 5 failed, 6 passed（含 500 回滚用例）；还原后 sha 0a584642ce0c64e7，复跑 179 passed"
       ],
-      "notes": "端点、错误码映射、11 条测试已完成，经 Hermes 独立复验 + Codex 外部审查（零阻塞）。仍为 in_progress 的唯一原因：负责人 T1 读懂门三问未答（PLAN.md 第三节），按 agent-loop-playbook R7 未过读懂门不进 passing。"
+      "notes": "端点、错误码映射、11 条测试已完成，经 Hermes 独立复验 + Codex 外部审查（零阻塞）。状态由 in_progress 改为 blocked：唯一阻塞是负责人 T1 读懂门三问未答（任务书存档在 docs/exec-plans/active/PLAN-m2-batch7-play-http-endpoint.md 第三节），按 agent-loop-playbook R7 未过读懂门不进 passing；blocked 而不是 in_progress 是为了不在 feature_list 里同时挂两个活跃功能（Codex 2026-11-20 P2）。答完三问即置 passing。"
+    },
+    {
+      "id": "sc-m2-08",
+      "priority": 9,
+      "area": "m2-persistence",
+      "title": "存档载入的版本契约 + 业务错误码单一来源",
+      "user_visible_behavior": "拿一份旧版本或已被改坏的存档链接去请求，看到的是 409 + 40902 / 500 + 50003 的人话提示，不再是一句 internal server error；同一业务码在全仓只有一处定义。",
+      "status": "blocked",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests",
+        "git diff --stat app/schemas/story_blueprint.py app/services/blueprint_validator.py app/services/play_engine.py app/services/conditions.py alembic/ requirements.txt"
+      ],
+      "evidence": [
+        "2026-11-20 开工基线 `./docs/harness/init.sh` → 179 passed, 1 warning in 6.69s",
+        "2026-11-20 收工全量 `.venv/Scripts/python.exe -m pytest -q` → 187 passed, 1 warning in 6.81s（净增 8 条）",
+        "2026-11-20 新增用例 8 条：test_save_blueprint_writes_explicit_blueprint_version、test_get_story_with_unsupported_blueprint_version_returns_409_40902、test_get_story_with_corrupted_blueprint_returns_500_50003、test_get_story_with_unpackable_json_columns_returns_500_50003[2]、test_get_story_with_scalar_json_personality_returns_500_50003、test_get_story_with_corrupt_invalid_json_personality_returns_500_50003、test_get_story_openapi_declares_archive_corruption_500",
+        "2026-11-20 五次变异全部变红并还原：A 版本比较改 if False → 1 failed；B except 改 ZeroDivisionError → 1 failed；C except 只留 ValidationError → 2 failed；D 拿掉 list 形状检查 → 1 failed（scalar personality）；E 宽 except 去掉 ValueError → 1 failed（非法 JSON）。每次还原后 sha 一致、复跑 187 passed",
+        "2026-11-20 探针实测（用完即删）：第一轮实现下 endings.conditions='\"oops\"' → 裸 500/500、choices.effects 缺 metric_key → KeyError 抛穿路由；第二轮扩捕后两者均 500/50003",
+        "2026-11-20 Codex 外部审查（`codex exec review --uncommitted`）：overall_correctness = patch is correct；4 条（1 P2 真漏洞 + 1 P2 harness 规则 + 2 P3），已全部处理或登记",
+        "2026-11-20 禁改比对 git diff --stat（schema/validator/play_engine/conditions/alembic/requirements）→ 空；tests/test_stories_api.py 只有追加无删除行"
+      ],
+      "notes": "由 Claude Code 四轮实现（第一轮只捕 ValidationError 被探针打回；第三轮补 list 形状检查 + OpenAPI 500；第四轮把非法 JSON 的 JSONDecodeError 也收进 50003），Hermes 独立复验 + 五次变异。状态为 blocked：唯一阻塞是负责人第 8 批读懂门三问未答（R7）。未做：secret/conditions 下发与 ownership（等负责人选方案）、savepoint 三条测试、provider_errors 里 42201/502xx 字面量收敛、推进接口的版本校验。"
     }
   ]
 }
