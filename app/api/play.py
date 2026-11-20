@@ -1,8 +1,8 @@
 """Apply one player choice to a persisted story.
 
 The model writes the blueprint once; every number after that is decided here by
-Python (see :mod:`app.services.play_engine`). This module only translates an
-engine outcome into the HTTP contract and owns the transaction boundary.
+Python (see :mod:`app.services.play_engine`). The engine owns the transaction
+boundary; this route only translates exceptions and assembles the response.
 """
 
 from fastapi import APIRouter, Depends
@@ -52,7 +52,8 @@ def play_choice(
         # written; the request-scoped session rolls back when it closes.
         raise play_error_to_app_error(exc) from exc
 
-    session.commit()
+    # The engine owns the transaction boundary; this route only translates
+    # exceptions and assembles the response.
     return PlayOutcomeResponse(
         data=PlayOutcomeData(
             public_id=outcome.story_public_id,

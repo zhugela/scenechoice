@@ -377,3 +377,140 @@ def test_old_blueprint_version_is_rejected_identically_by_detail_and_play(
         assert "supports version 1" in body["message"]
 
     assert detail.json()["message"] == play.json()["message"]
+
+
+def test_successful_play_is_committed_and_visible_to_a_fresh_session(
+    api_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """The engine, not the route, must commit: read the result via a new session.
+
+    ``api_client`` would also see the data through the request-scoped session,
+    so this deliberately opens an independent session after the response and
+    reads the metric rows and the appended event log straight from the DB.
+    """
+    public_id = _create_story(session_factory)
+    with session_factory() as session:
+        story_id = session.scalar(
+            select(Story.id).where(Story.public_id == public_id)
+        )
+        before_count = session.scalar(
+            select(func.count())
+            .select_from(StoryStateChange)
+            .where(StoryStateChange.story_id == story_id)
+        )
+    assert before_count == 1, "存档创建时应只有一条 story_created 事件"
+
+    response = api_client.post(
+        f"/api/stories/{public_id}/play", json={"choice_key": "e1_truth"}
+    )
+
+    assert response.status_code == 200
+    with session_factory() as session:
+        story = session.scalar(select(Story).where(Story.public_id == public_id))
+        assert story is not None
+        metrics = {metric.key: metric.current_value for metric in story.metrics}
+        changes = list(
+            session.scalars(
+                select(StoryStateChange)
+                .where(StoryStateChange.story_id == story.id)
+                .order_by(StoryStateChange.sequence)
+            )
+        )
+
+    assert metrics == {"reputation": 62, "mindset": 50}, "新 session 必须读到推进后的指标"
+    new_changes = changes[before_count:]
+    assert len(new_changes) == 5, "新 session 必须读到这一轮的 5 条事件"
+    assert [change.event_type for change in new_changes] == [
+        "story_status_changed",
+        "choice_selected",
+        "metric_changed",
+        "episode_status_changed",
+        "episode_status_changed",
+    ]
+    assert all(change.source == "player" for change in new_changes)
+
+
+def test_rejected_cross_episode_choice_leaves_no_rows_for_a_fresh_session(
+    api_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """A rejected advance must not be committed: a new session sees zero new rows."""
+    public_id = _create_story(session_factory)
+    assert (
+        api_client.post(
+            f"/api/stories/{public_id}/play", json={"choice_key": "e1_truth"}
+        ).status_code
+        == 200
+    )
+
+    with session_factory() as session:
+        story = session.scalar(select(Story).where(Story.public_id == public_id))
+        assert story is not None
+        story_id = story.id
+        before_ids = set(
+            session.scalars(
+                select(StoryStateChange.id).where(
+                    StoryStateChange.story_id == story_id
+                )
+            )
+        )
+        before_metrics = {metric.key: metric.current_value for metric in story.metrics}
+
+    response = api_client.post(
+        f"/api/stories/{public_id}/play", json={"choice_key": "e1_truth"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 40001
+
+    with session_factory() as session:
+        after_ids = set(
+            session.scalars(
+                select(StoryStateChange.id).where(
+                    StoryStateChange.story_id == story_id
+                )
+            )
+        )
+        story = session.scalar(select(Story).where(Story.id == story_id))
+        assert story is not None
+        after_metrics = {metric.key: metric.current_value for metric in story.metrics}
+
+    assert after_ids == before_ids, "被拒绝的推进不能在库里留下任何事件行"
+    assert after_metrics == before_metrics, "被拒绝的推进不能改变库里的指标值"
+
+
+def test_engine_commits_and_leaves_no_transaction_open(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """The engine owns the commit, and it must be an explicit one.
+
+    Exiting the savepoint block is enough to make SQLite persist the write
+    (pysqlite starts its transaction lazily, so RELEASE commits), but that is a
+    SQLite quirk, not a contract: on a backend whose transactions start eagerly
+    a released savepoint only merges. A session that is still mid-transaction
+    after ``advance_story`` returns is the signal that nobody committed.
+    """
+    from app.services.play_engine import advance_story
+
+    blueprint = StoryBlueprint.model_validate(valid_blueprint_data())
+    with session_factory() as session:
+        story = save_blueprint(session, blueprint)
+        session.commit()
+        public_id = story.public_id
+
+    with session_factory() as session:
+        outcome = advance_story(session, public_id, blueprint.episodes[0].choices[0].id)
+        assert outcome.sequence >= 1
+        assert not session.in_transaction(), (
+            "advance_story 返回后会话仍在事务中，说明它没有自己提交，"
+            "推进结果只是靠 SQLite 的 savepoint 特性侥幸落库"
+        )
+
+    with session_factory() as fresh:
+        rows = fresh.scalar(select(func.count()).select_from(StoryStateChange))
+        assert rows and rows > 1
+
+    with session_factory() as fresh:
+        stories = fresh.scalars(select(Story)).all()
+        for item in stories:
+            if item.public_id == public_id:
+                assert item.status != "ready", "推进后故事状态应已从 ready 迁走"

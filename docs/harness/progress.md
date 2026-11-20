@@ -18,6 +18,32 @@
 
 ## 会话记录
 
+### Session 018（M2 第 11 批：PR AI 审查回灌）
+
+- 日期：2026-11-20
+- 触发：PR #6 上 `github-actions[bot]` 的 AI 审查给了 2 条阻塞。Hermes 过滤后两条都算「建议看代价」，采纳并回灌。
+- 基线：`43801d6`，`201 passed`。
+
+| 审查意见 | Hermes 复核结论 | 处置 |
+|---|---|---|
+| 路由里 `session.commit()` 违反「api 只收参数调 service」 | 成立：`advance_story` 里 `with transaction:` 退出时已经处理提交，路由那句多余；而且**谁负责提交这件事没有任何测试钉住** | 删掉路由的 commit；**把 commit 移进引擎**（见下）；补 3 条测试 |
+| 两个入口的版本比较看不到共用同一份逻辑 | 成立（异常类型按层分开是对的，比较逻辑重复了） | `blueprint_contract.version_is_supported()` 成为唯一比较点，store 与 engine 都改用它 |
+
+- 本轮最关键的一处（不是审查提的，是回灌时自己撞出来的）：
+  - Claude Code 删掉路由 commit 后自己发现：请求路径里 `advance_story` 之前的 SELECT 已经触发 autobegin，所以 `in_transaction()` 为真 → 走 **`begin_nested()`**；SQLite 上 `RELEASE` 恰好会提交（就是 Session 017 那个坑），所以 203 条测试全绿，**但这是靠 SQLite 的怪癖侥幸落库**。换到事务立即开始的后端（Postgres/MySQL），释放 savepoint 只合并不提交，请求 session 关闭时回滚 —— 玩家的操作会**静默丢失**。
+  - 处置：在 `advance_story` 的 `with transaction:` 块之后显式 `session.commit()`，注释写清「不要依赖 savepoint 释放」。新增 `test_engine_commits_and_leaves_no_transaction_open`：断言引擎返回后 `session.in_transaction()` 为 **False** —— 这条断言才是「真的提交了」，SQLite 的怪癖骗不过它。
+- 验证证据（Hermes 实跑）：
+  - 全量：`204 passed, 1 warning in 7.48s`（基线 201，净增 3）
+  - `compileall app tests` → 通过；`grep -n "session.commit()" app/api/play.py` → 零命中
+  - `grep -n "blueprint_version != " -r app/` → 零命中（比较只剩 `blueprint_contract.py`）
+  - **变异 K**（删掉引擎里那句 `session.commit()`）→ `1 failed, 17 passed`，红的正是 `test_engine_commits_and_leaves_no_transaction_open`；还原后复跑 204 passed，`grep MUTATION` 零残留
+  - 独立探针（Hermes 手写脚本，跑完即弃）：`advance_story` 返回后 `session.in_transaction()` 为 False，新会话能看到 6 条事件行、指标 `reputation=62`
+- 已知风险：
+  - 引擎现在无条件 `session.commit()`：将来若有人想把 `advance_story` 嵌进更大的事务（比如「推进 + 记积分」原子提交），需要再加 `commit: bool = True` 参数，否则会被引擎提前提交。目前只有一个调用方（play 路由），没有这个需求。
+  - `begin_nested()` 分支仍然存在（请求路径永远走它，因为 SELECT 已 autobegin）；它的意义是「部分失败不污染请求事务」，但没有任何测试从 Postgres 角度验证过。
+  - AI 审查里还提到「`get_db_session` 异常路径是否 rollback」：`app/db.py:33` 是 `with SessionLocal() as session:`，`Session.__exit__` 会 close → 回滚未提交事务，结论是安全的；已用新会话零新增行测试间接钉住。
+- 下一步最佳动作：PR #6 已 `CLEAN`（CI + AI 审查都绿）。剩余可做项都是 M2 的 P3（WAL/busy_timeout、幂等键、时间戳带时区）；但更该做的是清读懂门（队列 3 批）。
+
 ### Session 017（M2 第 10 批：只做收尾，不加新行为）
 
 - 日期：2026-11-20

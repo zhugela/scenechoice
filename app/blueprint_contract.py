@@ -11,3 +11,14 @@ without the play engine importing the storage service just for a constant.
 """
 
 BLUEPRINT_VERSION = 1
+
+
+def version_is_supported(stored: int) -> bool:
+    """Whether a stored archive was written by the contract this server reads.
+
+    The comparison has exactly one definition, here, and both entry points use
+    it: :func:`app.services.story_store.load_blueprint` (the detail gate) and
+    :func:`app.services.play_engine.advance_story` (the play gate). Each layer
+    keeps its own exception type; only the comparison is shared.
+    """
+    return stored == BLUEPRINT_VERSION

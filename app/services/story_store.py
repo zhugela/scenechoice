@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 
 # Re-exported for callers that still import it from this module; the definition
 # lives in the neutral contract module shared with the play engine.
-from app.blueprint_contract import BLUEPRINT_VERSION
+from app.blueprint_contract import BLUEPRINT_VERSION, version_is_supported
 from app.models import (
     Character,
     Choice,
@@ -262,7 +262,7 @@ def load_blueprint(session: Session, public_id: str) -> StoryBlueprint | None:
         if story is None:
             return None
 
-        if story.blueprint_version != BLUEPRINT_VERSION:
+        if not version_is_supported(story.blueprint_version):
             raise BlueprintVersionError(
                 stored=story.blueprint_version,
                 supported=BLUEPRINT_VERSION,
