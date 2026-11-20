@@ -39,6 +39,31 @@
 - 已知风险：`b6d89c9` 提交的是负责人尚未读懂的代码，仅作回滚点，不代表已验收；读懂门（T1）未过之前不得在其上叠加新实现。
 - 下一步最佳动作：负责人答 `PLAN.md` 第三节 T1 的三问（Hermes 只挑错、不代答）；通过后选 T2 的 URL 方案 A/B，再由 Claude Code 实现端点。
 
+#### 第二轮（同日，负责人授权自主执行：`Run this plan ... don't ask me anymore`）
+
+负责人明确要求「按计划自己跑完、不要再问」，因此本轮的 T2–T7 由 Hermes 自主决策并执行；**T1 读懂门仍未完成，仍挂在负责人身上**。
+
+| 决策 / 动作 | 内容 | 依据 |
+|---|---|---|
+| T2 URL 形态 | 选方案 A：`POST /api/stories/{public_id}/play`，body `{"choice_key": "..."}` | 与既有 `/api/stories` 前缀一致；未来「回退一步」「跳过本集」可在同一资源上加动作 |
+| T4 错误码 | `40001` 跨集选错 / `40901` 已结局 / `50001` 无匹配结局 / `50002` 兜底 / 沿用 `40401` | 与既有「状态码 ×100 + 序号」规则一致（40401、42201、50201…） |
+| 新增文件 | `app/api/play.py`（46 行）、`app/services/play_errors.py`（57 行）、`tests/test_play_api.py`（11 条） | T3/T4/T5 |
+| 改动文件 | `app/main.py`（+2 行挂载路由）、`app/schemas/stories.py`（+3 个契约模型） | 同上 |
+
+- 验证证据（全部由 Hermes 实跑）：
+  - 新测试单跑：`pytest -q tests/test_play_api.py` → `11 passed, 1 warning in 0.99s`
+  - 全量：`pytest -q` → **`179 passed, 1 warning in 6.57s`**（基线 168，净增 11）
+  - 编译：`python -m compileall -q app tests` → 通过
+  - **变异 1**（`play_engine.py:90` 把 `(last or 0) + 1` 改成 `(last or 0)`）→ `13 failed, 166 passed`；还原后 sha256 前 16 位回到 `0a584642ce0c64e7`，`grep MUTATION` 零残留，复跑 `179 passed`
+  - **变异 2**（`play_errors.py` 把 `code=40001` 改成 `40002`）→ `1 failed, 10 passed`（红的正是跨集用例）；已还原
+  - 禁改比对：`git diff --stat app/schemas/story_blueprint.py alembic/ requirements.txt app/services/blueprint_validator.py` → 空
+  - 单一事实来源：`grep -rn "40001\|40901\|50001\|50002\|40401" app/` → 新码只出现在 `app/services/play_errors.py`（`40401` 在 `app/api/stories.py` 有 2 处既有字面量，留给下一批收敛）
+- 已知风险：
+  - 推进接口不是幂等重放：客户端超时重试会多消耗一集（与 Session 009 记录的 POST 风险同类）。
+  - 接口仍无鉴权与归属校验，`public_id` 就是能力凭据（Session 003/010 已记录，未变）。
+  - `40401` 现有 3 处字面量（`stories.py` ×2 + `play_errors.py` ×1），下批收敛到 `app/errors.py` 常量。
+- 下一步最佳动作：负责人做 T1 读懂门三问；`sc-m2-07` 待 Codex 审查结论落地后置 passing。
+
 ### Session 012
 
 - 日期：2026-11-18
