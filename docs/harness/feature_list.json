@@ -133,6 +133,23 @@
         "2026-11-18 一致性测试同时打两个端点，单跑 2.02s"
       ],
       "notes": "由 agentloop 中台 #32 派 Claude Code 实现，Hermes 独立复跑验收。改动尚未经本人逐行 review。"
+    },
+    {
+      "id": "sc-m2-07",
+      "priority": 8,
+      "area": "m2-play-loop",
+      "title": "玩家推进从服务层接到 HTTP 层",
+      "user_visible_behavior": "玩家对一个存档提交一个选项，服务端在同一事务里改指标、推进剧集、判定结局并写事件日志，返回当前状态；跨集选错、已结局、存档不存在各有明确错误码。",
+      "status": "in_progress",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        "存在可调用的推进端点，且 GET /api/stories/{public_id}/state 能看到 last_sequence 增长"
+      ],
+      "evidence": [
+        "2026-11-20 基线 `.venv/Scripts/python.exe -m pytest -q` → 168 passed, 1 warning（服务层已有 10 条测试，但无 HTTP 出口）",
+        "2026-11-20 `grep -rn \"play_engine\" app/ tests/` 只命中 tests/test_play_engine.py，证明 advance_story() 零调用方"
+      ],
+      "notes": "服务层与测试已存在但缺端点、缺任务书、缺错误码；本批按 PLAN.md T1-T7 收口。T1 读懂门未过之前不得叠加新实现。"
     }
   ]
 }

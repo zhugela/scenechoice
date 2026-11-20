@@ -18,6 +18,27 @@
 
 ## 会话记录
 
+### Session 013
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：把负责人的 Agent Loop 规则固化成文件、给工作区里「无任务书」的 play engine 补任务书并建立回滚点；**不开新功能实现**。
+- 基线：`.venv/Scripts/python.exe -m pytest -q` → `168 passed, 1 warning in 6.37s`（第 6 批收工时 158，净增 10 条来自 `tests/test_play_engine.py`）
+- 本轮做的三件事：
+
+| 动作 | 产出 | 为什么 |
+|---|---|---|
+| 固化负责人 11-20 口述的四个答案 | `docs/harness/agent-loop-playbook.md`（R1–R9 + 9 步流程 + 四类停手条件 + 自查清单模板） | 负责人不看代码、不看 diff，交付标准必须写死成「可观察证据 + 自查清单」，否则每轮都要重新讨论 |
+| 换任务书 | `PLAN.md` → M2 第 7 批；第 6 批归档到 `docs/exec-plans/completed/PLAN-m2-batch6-error-mapping.md` | 上次覆盖 PLAN 丢了历史（Session 007 已记录该风险），这次先归档 |
+| 建回滚点 | `b6d89c9`（代码检查点）、`b1c62b7`（文档） | 此前 4 个文件一直未提交，改坏了无处可退 |
+
+- 本轮查到的关键事实：
+  - **`app/services/play_engine.py` 的 `advance_story()` 零调用方**：`grep -rn "play_engine" app/ tests/` 只命中测试文件；`app/api/` 现有路由仅 stories ×4 + story_plans ×1 → 推进功能只有服务层，玩家没有任何入口，属「写了一半」。
+  - `app/services/blueprint_validator.py` 被上一轮改了 3+/7-（`_condition_matches` 改为转发 `conditions.py`）。行为等价、`168 passed` 兜底，但该文件在历次禁改清单内，等负责人一句话确认保留或回退。
+  - `.claude/` 仍未跟踪且未被 `.gitignore` 覆盖（Session 007 已记录，未处理）。
+- 约束遵守情况：未实现新功能；未改 M1 阶段门与 `sc-m1-03`；未改任何已有测试预期；未 push。
+- 已知风险：`b6d89c9` 提交的是负责人尚未读懂的代码，仅作回滚点，不代表已验收；读懂门（T1）未过之前不得在其上叠加新实现。
+- 下一步最佳动作：负责人答 `PLAN.md` 第三节 T1 的三问（Hermes 只挑错、不代答）；通过后选 T2 的 URL 方案 A/B，再由 Claude Code 实现端点。
+
 ### Session 012
 
 - 日期：2026-11-18
