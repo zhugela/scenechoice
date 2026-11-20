@@ -1,42 +1,55 @@
-# PLAN — M2 第 11 批：外部审查（PR AI 审查）回灌
+# PLAN — M2 第 12 批：SQLite 并发与持久化设置（WAL + busy_timeout）
 
-> 来源：PR #6 上 `github-actions[bot]` 的 AI 审查（DeepSeek）。它给了 2 条阻塞，Hermes 过滤后
-> 2 条都算「建议看代价」并采纳，理由写在各条里。第 2 条的一半（双端一致性测试）已在批次 10 补上。
-> 基线：`43801d6`，`201 passed`。
+> 来源：`docs/harness/reviews/latest.md` 的 P3「SQLite 只开了 foreign_keys，没有 WAL / busy_timeout」
+> 与 M2 评审第 6 问（SQLite 坑）。本批**不加任何新用户可见行为**。
+> 基线：`0aaa272`，`204 passed`。
 
-## 一、两条审查结论与处置
+## 一、现状事实
 
-### U1 事务边界：路由里那句 `session.commit()` 是多余的
+| 事实 | 证据 |
+|---|---|
+| 连接级只设了 `PRAGMA foreign_keys=ON` | `app/db.py:17-22` |
+| 没有 `busy_timeout` | `grep -rn "busy_timeout" app/` 零命中 |
+| 没有 `journal_mode=WAL` | `grep -rn "journal_mode\|WAL" app/` 零命中 |
+| 默认 rollback journal 下多写会 `database is locked`，SQLAlchemy 的默认超时只能算缓解 | 评审 P3 原文 |
 
-- 审查原话：`app/api/play.py` 里 `session.commit()` 写在路由函数里，违反「api 只收参数调 service」，
-  且与 `create_story` 的口径不一致。
-- Hermes 复核：`advance_story` 内部 `with session.begin():` 在成功退出时**已经提交**，
-  路由那句是空事务提交，功能上多余；但「谁负责提交」这件事**没有任何测试钉住**。
-- 处置：
-  1. 删掉 `app/api/play.py` 里多余的 `session.commit()`，并把注释改成说清「引擎自己管事务边界」。
-  2. 新增 1 条测试：推进成功后，用**新开 session**读库，必须读到推进后的指标值与
-     `story_state_changes` 新行 —— 这条测试才是「引擎真的提交了」的证据，而不是靠巧合。
-  3. 异常路径也补一条：推进失败（跨集选错）后，用**新开 session**读库，必须零新增行。
+## 二、本批做什么
 
-### U2 版本判断的单一来源
+### U1 连接级 `busy_timeout`
 
-- 审查原话：详情接口的版本闸与推进引擎的版本闸看不到共用同一个比较，可能各写一套。
-- Hermes 复核：两边确实各写了一次 `story.blueprint_version != BLUEPRINT_VERSION`，
-  异常类型按层分开（详情是 `ValueError` 系、推进必须挂在 `PlayError` 下），这个分层是对的；
-  但**比较逻辑**该只有一份。
-- 处置：在 `app/blueprint_contract.py` 增加 `version_is_supported(stored: int) -> bool`，
-  `story_store.load_blueprint` 与 `play_engine.advance_story` 都改用它；两个异常类型保持不动。
+- `app/db.py` 的连接监听里，SQLite 连接除了 `foreign_keys` 再加 `PRAGMA busy_timeout = <常量>`
+- 常量写清「为什么是这个值」：它管的是**等锁多久**才报 `database is locked`，和 SQLAlchemy 的
+  `connect_args` 超时是两回事；取一个「比一次事务长、又不至于让请求挂死」的值即可，写进常量注释。
 
-## 二、禁改清单
+### U2 库级 `journal_mode=WAL`
 
-- 任何对外行为（状态码、业务码、message、响应字段）
-- `app/schemas/*`、`blueprint_validator.py`、`conditions.py`、`app/models/*`、`alembic/*`、`requirements.txt`
+- 引擎创建后对 SQLite 库执行一次 `PRAGMA journal_mode=WAL`（幂等：已经是 WAL 再设一次无害）。
+- **必须只对文件库做**：`:memory:` 库设 WAL 会返回 `memory`，不是错误，但也没意义 —— 判掉，并把理由写进注释。
+- 若返回不是 `wal`，**不要让应用起不来**：记一条 warning 日志说明「没切到 WAL，可能是有别的连接占着」，
+  继续跑（一个开发机上的日志行，比启动失败更有用）。
+
+### U3 测试（3 条）
+
+1. 文件库：`create_db_engine(url)` 之后，新连接的 `PRAGMA journal_mode` 读回 `wal`，`PRAGMA busy_timeout` 读回常量值。
+2. 内存库（`sqlite://`）：不报错、不尝试切 WAL（断言 `journal_mode` 仍是 `memory`）。
+3. 连接监听对新开的每个连接都生效（连开两个连接各读一次，值都在）。
+
+### U4 文档
+
+`docs/RELIABILITY.md` 加一节「SQLite 并发假设」，写清：
+- WAL 下读写不互相阻塞，但**写仍然是单写者**；多进程同时写会排队等 `busy_timeout`
+- WAL 会产生 `-wal` / `-shm` 文件，已在 `.gitignore` 覆盖，备份时要一起拷
+- 这一节的存在意义：M3 上线前若改多进程部署，必须回来重读
+
+## 三、禁改清单
+
+- 任何对外行为（状态码、业务码、message、响应字段、API 契约）
+- `app/schemas/*`、`app/services/*`、`app/models/*`、`alembic/*`、`requirements.txt`
 - 任何已有测试的预期结果
-- 各 feature 的 status
+- 各 feature 状态
 
-## 三、验收标准
+## 四、验收标准
 
-1. `pytest -q` ≥ 203（U1 两条新增），已有用例零改动。
-2. 变异测试：把 `version_is_supported` 改成恒 `True` → 双端一致性用例必须红。
-3. `grep -n "blueprint_version != " app/` → 零命中（比较只在 `blueprint_contract` 里）。
-4. `grep -n "session.commit()" app/api/play.py` → 零命中。
+1. `pytest -q` ≥ 207（3 条新增），已有用例零改动。
+2. 变异测试两条：把 `busy_timeout` 的常量改成 0 → 用例 1 变红；删掉 WAL 调用 → 用例 1 变红。
+3. `grep -rn "busy_timeout\|journal_mode" app/` 只命中 `app/db.py`。

@@ -12,6 +12,12 @@
 | `story_planning_retry_base_seconds` | 0.5 | 0–10 |
 | `story_planning_retry_max_seconds` | 8.0 | 0–60 |
 
+## SQLite concurrency assumptions (SQLite 并发假设)
+
+- WAL lets readers and the writer proceed without blocking each other, but **writes are still single-writer**. Two processes writing at the same time queue for up to `SQLITE_BUSY_TIMEOUT_MS` (5s, `app/db.py`); after that the loser gets `database is locked`. `busy_timeout` is the lock-wait deadline, not SQLAlchemy's connect timeout.
+- WAL adds `-wal` and `-shm` files next to the database. Both are git-ignored (`.gitignore`: `*.db-wal`, `*.db-shm`). Any backup or copy of the database must include them, or run `PRAGMA wal_checkpoint(TRUNCATE)` first.
+- This section matters at M3: before moving to multiple worker processes or containers, re-read it. WAL does not make SQLite a multi-writer store; a single writer (or serialized writes) remains the safe assumption.
+
 ## Error classification (`DeepSeekClient`)
 
 | Signal | Retryable? | Result |
