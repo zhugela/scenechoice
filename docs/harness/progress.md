@@ -18,6 +18,33 @@
 
 ## 会话记录
 
+### Session 019（M2 第 12 批：SQLite 并发与持久化设置）
+
+- 日期：2026-11-20
+- 目标：把评审 P3「只开了 foreign_keys，没有 WAL / busy_timeout」补上，不加新用户可见行为。
+- 执行：Claude Code 一轮（1 分 51 秒）→ Hermes 复验 + 收窄一处异常捕获 + 两次变异。
+- 基线：`0aaa272`，`204 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `app/db.py` | 新增 `SQLITE_BUSY_TIMEOUT_MS = 5000`；连接监听每个 SQLite 连接都设 `PRAGMA busy_timeout`；新增 `_enable_sqlite_wal()` 对**文件库**执行一次 `PRAGMA journal_mode=WAL`，返回非 `wal` 只记 warning；新增 `_is_memory_database()` 跳过内存库 | 默认 rollback journal 下多写会 `database is locked`；`busy_timeout` 管「等锁多久」，与 SQLAlchemy `connect_args` 的连接超时不是一个旋钮，这条区别写进了常量注释 |
+| `app/db.py`（Hermes 收窄） | `except Exception` → `except (SQLAlchemyError, sqlite3.Error, OSError)` | 原写法把编码错误、拼写错误也吞成一条 warning，启动照跑、问题推迟到首个请求才暴露；收窄后库里/文件系统问题仍不阻止启动，代码 bug 会当场炸 |
+| `docs/RELIABILITY.md` | 新增「SQLite concurrency assumptions」一节：WAL 下读写不互相阻塞但**写仍是单写者**、`-wal`/`-shm` 备份要一起拷、M3 多进程部署前必须重读 | 这类假设不写下来，半年后换部署方式时没人记得 |
+| `tests/test_db_settings.py`（新增 3 条） | 文件库 WAL + busy_timeout 读回；内存库仍是 `memory` 但仍设 busy_timeout；两个连接各读一次证明监听对每个连接生效 | 只断言「读回常量」会在常量被改成 0 时自己骗自己，所以额外断言常量 > 0 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`207 passed, 1 warning in 8.92s`（基线 204，净增 3）
+  - `compileall app tests` → 通过
+  - **变异 L**（`SQLITE_BUSY_TIMEOUT_MS` 改 0）→ `1 failed`；**变异 M**（删掉 WAL 切换调用）→ `1 failed`；两次还原后 `grep MUTATION` 零残留，复跑 207 passed
+  - `grep -rn "busy_timeout\|journal_mode" app/ --include=*.py` → 只命中 `app/db.py`
+  - 仓库根无 `-wal`/`-shm` 残留（测试库都在 `tmp_path`）
+- 已知风险：
+  - `engine` 在**导入时**就会连一次库把 journal_mode 设成 WAL（此前是惰性连接）。任何「import 不碰库」的假设不再成立；CI/脚本里若 cwd 不同，会在那里创建一个空库文件（已 gitignore）。
+  - WAL 是**文件属性**，一次设置长期有效；测试断言的是「设置后读回 wal」，没有断言「重启后仍是 wal」（那是同一件事，但没测）。
+  - `busy_timeout` 只在连接建立时设，不做动态调整；多进程写会排队等 5s，超时后仍是 `database is locked`。
+  - 没有并发写的实测（两个进程同时写、验证排队而非报错）——那需要一个真起线程/进程的测试，属集成测试范畴，本批未做。
+- 下一步最佳动作：M2 剩余 P3 = POST 幂等键、时间戳带时区；或者清读懂门（队列仍是 3 批）。
+
 ### Session 018（M2 第 11 批：PR AI 审查回灌）
 
 - 日期：2026-11-20
