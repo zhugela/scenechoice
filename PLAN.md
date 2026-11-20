@@ -1,108 +1,100 @@
-# PLAN — M2 第 6 批：把「上游错误 → 应用错误」收敛成一份 + 补全 `/api/stories` 的错误矩阵
+# PLAN — M2 第 7 批：把「玩家推进」从服务层接到 HTTP 层
 
-> 上一份 PLAN（M2 第 5 批：存档恢复 + endings 顺序）的两个任务已于提交 `bf59f40` / `2211b8b` 落地，并在 `sc-m2-05` 记为 passing。
-> 本批来源：`docs/harness/reviews/latest.md` 的两条 P2 —— 「上游错误映射整段复制两份」与「新端点错误码矩阵只覆盖 7 种组合」。
-> 本批**只做这两条**，其余 P2/P3 留下一批。
+> 上一份 PLAN（M2 第 6 批：上游错误映射收敛）已随提交 `d39759d` 落地，归档在
+> `docs/exec-plans/completed/PLAN-m2-batch6-error-mapping.md`。
+> 本批来源：工作区里已存在、但**没有任务书、没有 HTTP 出口**的那三个新文件。
+> 本批**只做推进链路的收口**，不开新玩法。
+> 本批起提交动作由 Hermes 执行（见 `docs/harness/agent-loop-playbook.md` R8）。
 
-## 背景事实（别重新推理，直接按这里改）
+## 一、现状事实（已实测，别重新推理）
 
-### 现状 1：同一张映射表写了两遍，且副本丢了异常链
+| 事实 | 证据 |
+|---|---|
+| `app/services/play_engine.py` 261 行，`advance_story()` 是唯一的推进入口 | 文件已读 |
+| `app/services/conditions.py` 73 行，供 validator 与 play_engine 共用求值逻辑 | `blueprint_validator.py:5` 已 import |
+| `tests/test_play_engine.py` 238 行 / 10 条测试，全绿 | 2026-11-20 Hermes 实跑 `168 passed, 1 warning in 6.37s`（第 6 批收工时是 158） |
+| **`advance_story()` 零调用方**：除测试文件外无人 import | `grep -rn "play_engine" app/ tests/` 只命中 `tests/test_play_engine.py` |
+| **没有任何推进端点**：现有路由只有 stories ×4 + story_plans ×1 | `grep -rn "@router\." app/api/` |
+| 本批此前无任务书、无 `progress.md` 记录、`feature_list.json` 无对应条目 | 三份文件均已核对 |
 
-`app/api/story_plans.py:48-87`（preview 侧，**这份是基准**）与 `app/api/stories.py:41-87`（落库侧，**这份是副本**）逐条相同：
+**结论：这是一个"写了一半"的功能。** 服务层能算、能写事件日志、能判结局，但玩家在界面上没有任何地方能触发它。负责人早上的检查方式（看前后端功能有没有实现）会被这一条卡住，所以本批第一件事就是把这件事说清。
 
-```python
-# app/api/story_plans.py:48-60（节选）
-    except DeepSeekClientError as exc:
-        if exc.status_code in {401, 403}:
-            raise AppError(
-                "story model credentials were rejected",
-                code=50302,
-                status_code=503,
-            ) from exc
-        if exc.status_code == 402:
-            raise AppError(
-                "story model account has insufficient balance",
-                code=50303,
-                status_code=503,
-            ) from exc
-```
+## 二、待负责人一句话确认的越界改动
 
-副本 `app/api/stories.py:45-49` 长这样——**没有 `from exc`**：
+工作区 `app/services/blueprint_validator.py` 被改了 **3 行 / 删 7 行**：
+`_condition_matches()` 不再自己写五分支字典，改为转发到 `app/services/conditions.py` 的 `condition_matches()`。
 
-```python
-            raise AppError(
-                "story model credentials were rejected",
-                code=50302,
-                status_code=503,
-            )
-```
+- 行为等价：`168 passed`（含 validator 的 30 条历史用例）
+- 与上一批 `provider_errors.py` 属同一类收敛：同一份知识只留一处
+- 但这文件在历次收工记录里都出现在**禁改清单**里
 
-它是个 `NoReturn` 辅助函数（`def _raise_planning_error(exc: Exception) -> NoReturn:`，`app/api/stories.py:41`），内部 `raise` 不会自动把 `exc` 挂成 `__cause__`，所以「原始上游错误」这条线索在落库路径上断了。
+→ Hermes 建议**保留**。负责人确认保留则记为已批准；不确认则在 T3 随本批一起回退这一处。
 
-**具体反例**：以后有人要支持 `425 Too Early`（确实该算可重试），改 `app/clients/deepseek.py` 的 `is_retryable_status` 两边都会跟上——这一步是对的。
-但如果改的是**分支结构**（例如把 402 从 503 改成 400），他很容易只改 `story_plans.py` 一侧：
-`POST /api/story-plans/preview` 返回 `400/50202`，而 `POST /api/stories` 还返回 `503/50303`。同一个上游错误，两个接口给出两种契约，而 CI 全绿——因为下面这条。
+## 三、任务（按序执行，一次只做一件）
 
-### 现状 2：测试矩阵只守住一半，改坏也不红
+### T1 读懂门（负责人做，Hermes 只挑错、不代答）
 
-`tests/test_stories_api.py:401-447` 的矩阵只有 7 组：401 / 402 / 200(畸形) / 400 / 302 / None / `StoryPlanningError`。
+`advance_story()` 是本项目的核心玩法执行器。在它接上 HTTP 之前，负责人必须能脱稿说清：
 
-**缺**：403、408、429、500。而 preview 侧的同一张表（`tests/test_story_plans_api.py:204-213`）是有的：
+1. 玩家选了一个「不属于当前这一集」的选项时，会发生什么？数据库里会不会留下半条记录？
+2. 玩家的两次选择之间，谁决定「现在该玩第几集」？如果库里被手工改成两集都是 `in_progress`，代码挑哪一集？
+3. 某个选项写 `delta: +80`、当前值是 50，结果是多少？为什么不是 130？
 
-```python
-        (401, 503, 50302, "story model credentials were rejected"),
-        (403, 503, 50302, "story model credentials were rejected"),
-        (408, 502, 50201, "story model is temporarily unavailable"),
-        (429, 502, 50201, "story model is temporarily unavailable"),
-        (500, 502, 50201, "story model is temporarily unavailable"),
-        (422, 400, 50202, "story model rejected the request"),
-```
+三问答完、Hermes 挑完错，才进 T2。
 
-`tests/test_retryable_status_source.py` 里那个扫 400..599 的全量循环也只打 `/api/story-plans/preview`，没打 `/api/stories`。
+### T2 定 URL 形态（两个方案，负责人选）
 
-所以现在把 `app/api/stories.py` 里对 `is_retryable_status` 的判断去掉、让 408/429 落进 `400/50202`，**没有任何测试会红**。
+| 方案 | 形态 | 优点 | 缺点 |
+|---|---|---|---|
+| **A（推荐）** | `POST /api/stories/{public_id}/play`，body `{"choice_key": "..."}` | 名词清楚；以后加「回退一步」「跳过本集」都是同一资源的动作 | URL 不带剧集号，跨集判断只能靠服务层 |
+| B | `POST /api/stories/{public_id}/episodes/{number}/choices/{choice_key}` | 语义最直白，天生拒绝跨集选错 | URL 长；换集逻辑散到路由层；每加一个动作要新开路径 |
 
-## 要修的两条
+### T3 实现端点（Claude Code）
 
-### ① [P2] 映射收敛成一份函数，两个路由都调它
+- 新增 `app/api/play.py`（或并入 `stories.py`，由 T2 结果决定），挂到 `app/main.py`
+- 复用 `get_db_session`；单事务；**不新增依赖**
+- 响应体用 `PlayOutcome` 的字段显式拼，不直接 `return` dataclass
 
-- 新增一个共享函数，签名建议 `def provider_error_to_app_error(exc: DeepSeekClientError) -> AppError`；位置你自己定（`app/clients/deepseek.py` 或 `app/services/` 下的新模块），但必须在报告里说清为什么放那里——判断依据是「这份知识归哪一层」，不是「哪里好 import」。
-- `app/api/story_plans.py` 与 `app/api/stories.py` 都改成调用它；两个路由里不再出现 `50302/50303/50201/50202/50204` 这些字面量。
-- **异常链不许丢**：调用方一律 `raise app_error from exc`。这是本批唯一「修好一处真实缺陷」的点，别当顺手。
-- `StoryPlanningError → 422/42201` 不是「上游 HTTP 错误」，**不要**塞进同一个函数，保持各自路由处理（两个路由现在的行为本来就一致）。
+### T4 错误映射（单一事实来源）
 
-### ② [P2] 把矩阵补齐，并加一条「只改一处会变红」的一致性网
+`PlayError` 四个子类 → `AppError`，**只允许写在一处**（与 `provider_errors.py` 同一哲学）：
 
-- `tests/test_stories_api.py:401-447` 的表补上 **403 / 408 / 429 / 500** 四组，期望值照 preview 表抄（那是已定契约）。
-- 把 `tests/test_retryable_status_source.py` 里 400..599 的全量循环**扩到 `/api/stories`**：同一组状态码，两个端点返回的 `(status_code, code, message)` 三元组必须完全相同。这条才是真正守住「两份不会漂移」的网。
-  - 若 508 个状态 × 两个端点跑起来太慢（单条 >5s），可以抽成两边共用同一张参数表各自参数化，但**不许**只测其中一个端点。
-- 报告里给出这条一致性测试的单跑耗时，供我决定它留在默认套件还是打 `slow` 标记。
+| 异常 | HTTP | 业务码 | 触发条件 |
+|---|---|---|---|
+| `StoryNotFound` | 404 | 沿用既有 40401 | public_id 不存在 |
+| `StoryFinished` | 409 | 本批新定 | 故事已 completed / abandoned |
+| `ChoiceNotInCurrentEpisode` | 400 | 本批新定 | 选项不属于当前集 |
+| `NoMatchingEnding` | 500 | 本批新定 | 蓝图通过可达性校验后仍无结局 = 数据被手改 |
 
-## 不许做的事
+新业务码先在任务书里定好数字再写代码，不许边写边取。
 
-- 不许改 M1 `preview` 的**对外行为**：401/403/402/200 畸形/永久 4xx/1xx-3xx/5xx 的既有映射一个都不许变（`tests/test_story_plans_api.py:204-232` 全绿是硬约束）。
-- 不许放宽或删除任何已有断言的预期值；只允许**新增**用例、把已有表**扩行**。
-- 不许顺手改本批之外的 P2/P3（`blueprint_version` 校验、savepoint 测试、secret 泄漏、WAL、幂等键都留给下一批）。
-- 不许改 `app/services/blueprint_validator.py`、`app/schemas/story_blueprint.py`、`alembic/versions/` 下任何文件。
-- 不许 `git add` / `git commit` / `git push`（提交由本人决定）。
-- 不许为了「让测试过」去改对外行为——本批是**重构 + 补测试**，对外行为零变化。
+### T5 测试（正常 1 条 + 失败 4 条 + 1 条事件可见）
 
-## 验收底线（缺一条就不算做完）
+- 正常：创建 → 连推到结局；`GET /api/stories/{id}/state` 能读到 `last_sequence` 增长
+- 失败：404 / 已结局 / 跨集选错（断言**库内零新增行**）/ 无匹配结局
+- 事件可见：推进后 `GET .../state` 的最近变化里出现 `choice_selected` 与 `metric_changed`
 
-1. **基线**：动手前先跑一次 `.venv/Scripts/python.exe -m pytest -q`，把真实数字写进报告（当前应为 `153 passed`）。
-2. **红绿证据（本批核心，必须真跑）**——用变异测试证明「改坏一处会变红」，不是嘴上说：
-   - 先让收敛后的实现跑绿；
-   - 然后**临时**把共享函数里的可重试判断改坏一处（例如把 `is_retryable_status(x)` 换成 `False`），跑测试，**必须至少 `1 failed`**，把失败用例名与断言贴出来；
-   - 再改回来，跑全绿；
-   - 报告里写清「改了哪一行 → 哪个用例红了 → 恢复后绿」，并用 `git diff` 自证那一行**没留在最终代码里**。
-3. **异常链**：补一条测试断言落库路径上 `AppError.__cause__` 是原始 `DeepSeekClientError`（preview 侧若已有类似写法就照抄，没有就新增）。这是本批唯一能证明「副本曾丢 chain」的回归网。
-4. **映射只剩一份**：`grep -rn "50302\|50303\|50201\|50202\|50204" app/` 的结果里，这些字面量只应出现在**一个**模块（共享函数所在处），`app/api/*.py` 里一个都不该有。把 grep 输出贴进报告。
-5. **全量**：`.venv/Scripts/python.exe -m pytest -q` 全绿，且总数 > 153。贴真实输出末行。
-6. **不动 M1**：`git diff --stat` 里 M1 相关文件只应出现 `app/api/story_plans.py`（因收敛而被改，允许），其余 M1 文件零改动。
+### T6 复验（Hermes，不采信任何 agent 自述）
 
-## 收工要输出什么
+- 全量 `pytest -q`，数字必须 ≥ 176（168 + 新增 ≥8）
+- 变异测试：把 `_next_sequence` 的 `(last or 0) + 1` 改成 `(last or 0)` → 必须有测试变红，恢复后全绿
+- 禁改比对：`app/schemas/story_blueprint.py`、`alembic/versions/`、已有测试预期零改动
 
-1. 改了哪几个文件、每处为什么这么改（一张表：文件 / 改了什么 / 为什么）。
-2. 上面六条验收的**真实命令输出**，尤其是第 2 条的变异红绿三段与第 4 条的 grep。
-3. 仍然存在的风险（例如一致性测试变慢、`_raise_planning_error` 删没删、499/409 语义未动）。
-4. `docs/harness/progress.md` 与 `PLAN.md` 不算你的改动——那两份由本人（Hermes）来写。
+### T7 落盘（Hermes）
+
+`docs/harness/progress.md` 新增 Session 013；`feature_list.json` 新增 `sc-m2-07`，`passing` 必须带本轮真实数字。
+
+## 四、禁改清单（本批）
+
+- `app/schemas/story_blueprint.py`
+- `app/services/blueprint_validator.py`（除第二节那处待确认的转发，不再动）
+- `alembic/versions/` 下任何已发布迁移
+- 任何已有测试的预期结果
+- M1 阶段门与 `sc-m1-03` 状态
+
+## 五、验收标准（负责人视角，不需要读代码）
+
+1. 能一句话说清：**玩家在哪个 URL 做什么动作，返回什么**
+2. 有一个真实可调的端点，正常路径与至少一条失败路径各有测试证据
+3. 全量测试数字从 168 涨上去，且没有任何一条老测试被改预期
+4. 负责人能脱稿答出 T1 的三问
