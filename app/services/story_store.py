@@ -12,6 +12,9 @@ from uuid import uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+# Re-exported for callers that still import it from this module; the definition
+# lives in the neutral contract module shared with the play engine.
+from app.blueprint_contract import BLUEPRINT_VERSION
 from app.models import (
     Character,
     Choice,
@@ -45,12 +48,6 @@ class BlueprintStorageError(ValueError):
     def __init__(self, issues: list[str]) -> None:
         super().__init__("blueprint cannot be stored")
         self.issues = issues
-
-
-# Which generation contract this module's mapping code produces and expects.
-# It lives next to the mapping (not in the schema module) because it describes
-# the JSON shapes written to SQL rows, not the Pydantic types themselves.
-BLUEPRINT_VERSION = 1
 
 
 class BlueprintVersionError(ValueError):
@@ -181,6 +178,27 @@ def _story_from_blueprint(blueprint: StoryBlueprint) -> Story:
     return story
 
 
+def _start_outer_transaction(session: Session) -> None:
+    """Make the caller's transaction exist at the database level.
+
+    pysqlite opens the database transaction lazily and only immediately before
+    DML. When a caller begins a transaction but has not written yet, the first
+    statement SQLAlchemy sends is our ``SAVEPOINT``. SQLite treats that
+    savepoint as the statement that started the transaction, so releasing it
+    commits instead of merely merging into the outer transaction, and the
+    caller's later ``rollback()`` cannot undo the save. Emitting ``BEGIN`` up
+    front keeps the savepoint genuinely nested.
+
+    Only SQLite needs the nudge; other drivers begin when the Session does.
+    """
+    connection = session.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    dbapi_connection = connection.connection.driver_connection
+    if not dbapi_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
+
+
 def save_blueprint(session: Session, blueprint: StoryBlueprint) -> Story:
     """Save one complete story in one transaction.
 
@@ -194,9 +212,11 @@ def save_blueprint(session: Session, blueprint: StoryBlueprint) -> Story:
     if issues:
         raise BlueprintStorageError(issues)
 
-    transaction = (
-        session.begin() if not session.in_transaction() else session.begin_nested()
-    )
+    if session.in_transaction():
+        _start_outer_transaction(session)
+        transaction = session.begin_nested()
+    else:
+        transaction = session.begin()
     with transaction:
         story = _story_from_blueprint(blueprint)
         session.add(story)

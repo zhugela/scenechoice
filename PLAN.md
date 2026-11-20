@@ -1,63 +1,60 @@
-# PLAN — M2 第 9 批：推进接口的口径对齐（版本闸 + 拆蓝图异常映射）
+# PLAN — M2 第 10 批：只做「不加新用户可见行为」的收尾
 
-> 上一份任务书（第 8 批：存档载入版本契约）已随提交 `acc139c` 落地；本批是它的两处
-> 直接后果，来自 Session 015 合并 master 时发现的口径不一致。
-> 本批提交动作由 Hermes 执行（`docs/harness/agent-loop-playbook.md` R8）。
+> 前一份任务书（第 9 批）已随提交 `98c3cc4` 落地。
+> 本批**故意不加任何新功能**：读懂门队列已有 3 批（`sc-m2-07` / `sc-m2-08` / `sc-m2-09`），
+> 按 playbook R7 不能再往负责人头上叠新行为。本批只补测试网、收字面量、去掉一处隐患。
 
-## 一、现状事实（已实测）
+## 一、现状事实
 
 | 事实 | 证据 |
 |---|---|
-| 合并后基线 | `7c0ae28` 上 `.venv/Scripts/python.exe -m pytest -q` → `194 passed, 1 warning in 6.74s` |
-| 推进链路不校验存档版本 | `advance_story()`（`app/services/play_engine.py:138`）取到 story 后直接判 `FINISHED_STATUSES`；`grep -rn "BLUEPRINT_VERSION" app/` 只有 `story_store.py` |
-| 详情接口与推进接口口径不一致 | 详情接口对旧版本存档给 `409/40902`（第 8 批），同一个存档走 `/play` 却照旧推进 |
-| 引擎会抛未映射的 `BrokenBlueprint` | `app/services/play_engine.py:59`；`grep -n "BrokenBlueprint" app/services/play_errors.py` → 零命中，落进 50002 兜底网，码名是「story could not be advanced」，玩家看不出是存档坏了 |
+| 收工基线 | `98c3cc4` 上 `.venv/Scripts/python.exe -m pytest -q` → `197 passed, 1 warning in 7.30s` |
+| `save_blueprint` 的 savepoint 分支零测试 | `app/services/story_store.py:148-150` 有 `session.begin_nested()` 分支；`grep -n "begin_nested\|savepoint" tests/` 零命中（评审 P2 原文：这是第 3 批把保存嵌进更大事务的入口） |
+| `provider_errors` 里仍是字面量 | `app/services/provider_errors.py` 里 `42201 / 50201 / 50202 / 50204 / 50302 / 50303` 直接写在代码里，而 `app/errors.py` 已经是业务码唯一来源（第 8 批定了 7 个常量） |
+| 版本闸有两处，没有一致性测试 | 详情接口在 `app/api/stories.py`、推进引擎在 `app/services/play_engine.py`；同一个旧存档在两个入口必须是同一个 `(409, 40902)`，现在没有任何测试同时打两边 |
+| `play_engine` 为拿一个常量 import 整个 `story_store` | `app/services/play_engine.py:32`；方向没环，但没人守，将来 store 反向 import 就会当场炸 |
 
-## 二、本批做什么（三个单元）
+## 二、本批做什么（四件，全是「不改对外行为」）
 
-### U1 推进链路加版本闸（唯一允许碰 play_engine 的一处）
+### U1 savepoint 三条测试（只加测试，不改实现）
 
-`advance_story()` 取到 `story` 之后、判 `FINISHED_STATUSES` 之前，插入：
+新增测试（放 `tests/test_stories_api.py` 或新建 `tests/test_story_store_savepoint.py`，你定，理由写进报告）：
 
-```
-if story.blueprint_version != BLUEPRINT_VERSION: raise UnsupportedBlueprintVersion(...)
-```
+1. 外层事务内调用 `save_blueprint` 后**外层 rollback** → 7 张业务表全部 0 行。
+2. 外层事务内调用 `save_blueprint` 后**外层 commit** → 故事整树落库（行数断言照既有写法）。
+3. savepoint 内失败（用既有 `after_flush_postexec` 钩子在同一故事树上抛错）→ 外层事务**仍可用**：随后能正常 commit 另一条记录，且失败那棵树零残留。
 
-- 新异常 `UnsupportedBlueprintVersion(PlayError)`，与既有四个子类同一形状。
-- `BLUEPRINT_VERSION` 从 `app/services/story_store.py` import（无循环：store 不 import engine）。
-- **为什么破例改 play_engine**：另一条路是在路由里先查一次存档再调引擎——那会把「按 public_id 取存档」
-  拆成两处、多一次查询，而且第二个取数点将来照样会漂移。本批只允许在取到 story 之后加这几行，
-  推进逻辑（指标夹取、结局判定、事件日志）**一行不许动**，交付时要给 `git diff` 证明。
+### U2 业务码字面量收敛
 
-### U2 两类引擎异常进映射表（单一事实来源）
+- `app/errors.py` 补齐 `provider_errors` 需要的常量（沿用「状态码 ×100 + 序号」命名）：
+  `42201 / 50201 / 50202 / 50204 / 50302 / 50303`。
+- `app/services/provider_errors.py` 改为引用常量；**对外行为零变化**，OpenAPI 描述里的数字照旧保留。
+- 顺手核对：`grep -rn "42201\|50201\|50202\|50204\|50302\|50303" app/` 收敛后字面量只应出现在 `app/errors.py`（与第 12 轮那次 provider 收敛同一标准）。
 
-| 异常 | HTTP | 业务码 | 为什么 |
-|---|---|---|---|
-| `UnsupportedBlueprintVersion` | 409 | `40902`（复用第 8 批的 `STORY_VERSION_UNSUPPORTED`） | 与详情接口同一件事，同一个码；请求合法，是存档与当前契约不兼容 |
-| `BrokenBlueprint` | 500 | `50003`（复用 `STORY_ARCHIVE_CORRUPTED`） | 存档内部不一致（如选项引用不存在的指标）= 库外改坏，与详情接口的「存档损坏」是同一类故障 |
-| 其余未知 `PlayError` | 500 | `50002` | 只剩真正的兜底网 |
+### U3 双端版本闸一致性测试
 
-- OpenAPI：`PLAY_409_DESCRIPTION` 写清 `40901`（已结局）/ `40902`（旧版本）；
-  `PLAY_500_DESCRIPTION` 写清 `50001`（无匹配结局）/ `50003`（存档损坏）。数字照旧写给人看。
+新增 1 条测试：存好一个故事 → 把 `blueprint_version` 改成 0 →
+`GET /api/stories/{id}` 与 `POST /api/stories/{id}/play` **两边都**返回 `409` 且 `code == 40902`，
+且两边 message 都能被人读懂（不含 `internal server error`）。
 
-### U3 测试（只追加 `tests/test_play_api.py`，不改任何已有用例）
+### U4 把 `BLUEPRINT_VERSION` 挪到中立模块
 
-1. 把存档 `blueprint_version` 改成 0 后推进 → `409` + `40902`，且**库内零新增行**（沿用既有「零新增」断言写法）。
-2. 把某选项 `effects` 的 `metric_key` 改成不存在的 `ghost` 后推进 → `500` + `50003`。
-3. 既有 `40901`（已结局）、`50001`（无匹配结局）、`40001`（跨集）用例必须原样全绿。
+- 新增 `app/blueprint_contract.py`，只放 `BLUEPRINT_VERSION` 与一句说明（为什么这个版本号管的是
+  「写进 SQL 行的 JSON 形状」，不归 schema 也不归某个 service）。
+- `story_store.py`、`play_engine.py` 改为从这里 import，`play_engine` 不再 import `story_store`。
+- 验证：`grep -n "story_store" app/services/play_engine.py` → 零命中；`python -c "import app.main"` 通过。
 
 ## 三、禁改清单
 
-- `app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`
-- `app/services/play_engine.py`：**除 U1 那几行外一行不许动**
-- `app/services/conditions.py`、`app/models/`、`alembic/`、`requirements.txt`
-- 任何已有测试的预期结果、`tests/test_play_engine*.py`
-- M1 阶段门、`sc-m1-03`、`sc-m2-07`、`sc-m2-08` 的状态
+- 任何**对外行为**（状态码、业务码、message、响应体字段）
+- `app/schemas/story_blueprint.py`、`app/services/blueprint_validator.py`、`app/services/conditions.py`
+- `app/models/`、`alembic/`、`requirements.txt`
+- 任何已有测试的预期结果
+- `sc-m1-03` / `sc-m2-07` / `sc-m2-08` / `sc-m2-09` 的状态
 
 ## 四、验收标准
 
-1. 一句话说清：**旧版本存档现在在详情和推进两个入口都被同一个 409/40902 挡住；存档内部不一致时，
-   推进接口返回 500/50003，而不是含糊的 50002。**
-2. 全量 `pytest -q` 从 194 涨到 ≥197，已有用例零改动。
-3. 变异测试：版本闸改 `if False:` → 用例 1 变红；删掉 `BrokenBlueprint` 分支 → 用例 2 变红。
-4. `git diff app/services/play_engine.py` 只有版本闸那几行。
+1. 全量 `pytest -q` 从 197 涨到 ≥201（U1 三条 + U3 一条），且已有用例零改动。
+2. `grep -rn "50201\|50303\|42201" app/` 只命中 `app/errors.py`。
+3. 变异测试两条：把 `save_blueprint` 的 `session.begin_nested()` 改成 `session.begin()` → U1 至少一条变红；把详情接口的版本闸改 `if False:` → U3 变红。
+4. `grep -n "story_store" app/services/play_engine.py` 零命中。

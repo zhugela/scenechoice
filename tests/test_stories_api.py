@@ -752,3 +752,132 @@ def test_get_story_openapi_declares_archive_corruption_500(
 
     assert "500" in responses
     assert "50003" in responses["500"]["description"]
+
+
+def test_save_blueprint_inside_outer_transaction_rolls_back_with_it(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """The savepoint branch must not commit behind the caller's back.
+
+    ``save_blueprint`` takes ``begin_nested()`` whenever the session already
+    has a transaction. Releasing that savepoint makes the rows visible inside
+    the outer transaction, but only the caller's commit may make them survive.
+    """
+    blueprint = StoryBlueprint.model_validate(valid_blueprint_data())
+
+    with session_factory() as session:
+        session.begin()
+        save_blueprint(session, blueprint)
+        assert _row_count(session, Story) == 1, "外层事务内应能看到刚写入的故事"
+        session.rollback()
+
+    with session_factory() as session:
+        counts = {
+            model.__tablename__: _row_count(session, model)
+            for model in (
+                Story,
+                Character,
+                Metric,
+                Episode,
+                Choice,
+                Ending,
+                StoryStateChange,
+            )
+        }
+
+    assert counts == {
+        "stories": 0,
+        "characters": 0,
+        "metrics": 0,
+        "episodes": 0,
+        "choices": 0,
+        "endings": 0,
+        "story_state_changes": 0,
+    }
+
+
+def test_save_blueprint_inside_outer_transaction_survives_outer_commit(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """Releasing the savepoint hands the whole tree to the caller's commit."""
+    blueprint = StoryBlueprint.model_validate(valid_blueprint_data())
+
+    with session_factory() as session:
+        session.begin()
+        public_id = save_blueprint(session, blueprint).public_id
+        session.commit()
+
+    with session_factory() as session:
+        restored = load_blueprint(session, public_id)
+        counts = {
+            model.__tablename__: _row_count(session, model)
+            for model in (
+                Story,
+                Character,
+                Metric,
+                Episode,
+                Choice,
+                Ending,
+                StoryStateChange,
+            )
+        }
+
+    assert restored is not None
+    assert restored.model_dump() == blueprint.model_dump()
+    assert counts == {
+        "stories": 1,
+        "characters": 2,
+        "metrics": 2,
+        "episodes": 3,
+        "choices": 6,
+        "endings": 3,
+        "story_state_changes": 1,
+    }
+
+
+def test_savepoint_failure_leaves_outer_transaction_usable_and_no_residue(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """A failed savepoint must roll back only its own tree, not poison the session."""
+    blueprint = StoryBlueprint.model_validate(valid_blueprint_data())
+
+    with session_factory() as session:
+        session.begin()
+
+        def fail_after_flush(db_session, flush_context) -> None:
+            raise RuntimeError("forced savepoint failure")
+
+        event.listen(session, "after_flush_postexec", fail_after_flush, once=True)
+        with pytest.raises(RuntimeError, match="forced savepoint failure"):
+            save_blueprint(session, blueprint)
+
+        assert _row_count(session, Story) == 0, "失败的 savepoint 必须整棵树回滚"
+
+        survivor_id = save_blueprint(session, blueprint).public_id
+        session.commit()
+
+    with session_factory() as session:
+        counts = {
+            model.__tablename__: _row_count(session, model)
+            for model in (
+                Story,
+                Character,
+                Metric,
+                Episode,
+                Choice,
+                Ending,
+                StoryStateChange,
+            )
+        }
+        stored_ids = list(session.scalars(select(Story.public_id)))
+
+    assert stored_ids == [survivor_id], "失败的树不能留下任何 Story 行"
+    assert counts == {
+        "stories": 1,
+        "characters": 2,
+        "metrics": 2,
+        "episodes": 3,
+        "choices": 6,
+        "endings": 3,
+        "story_state_changes": 1,
+    }

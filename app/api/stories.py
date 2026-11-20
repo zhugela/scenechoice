@@ -9,6 +9,7 @@ from app.errors import (
     AppError,
     STORY_ARCHIVE_CORRUPTED,
     STORY_NOT_FOUND,
+    STORY_PLAN_INVALID,
     STORY_VERSION_UNSUPPORTED,
 )
 from app.models import Story
@@ -92,7 +93,7 @@ async def create_story(
     except StoryPlanningError as exc:
         raise AppError(
             "unable to create a valid story plan",
-            code=42201,
+            code=STORY_PLAN_INVALID,
             status_code=422,
         ) from exc
 
@@ -101,7 +102,7 @@ async def create_story(
     except BlueprintStorageError as exc:
         raise AppError(
             "unable to create a valid story plan",
-            code=42201,
+            code=STORY_PLAN_INVALID,
             status_code=422,
         ) from exc
     return StoryCreatedResponse(data=StoryCreatedData(**_summary(story).model_dump()))

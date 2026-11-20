@@ -40,3 +40,30 @@ PLAY_ADVANCE_FALLBACK = 50002
 # Stored JSON columns cannot be rebuilt into a blueprint. Only a write outside
 # the API can cause this, so it is a server-side fault.
 STORY_ARCHIVE_CORRUPTED = 50003
+
+# The model replied, but what came back could not become a storable blueprint.
+# Used both by the planner path and by storage validation so the client sees one
+# code regardless of which stage rejected the output.
+STORY_PLAN_INVALID = 42201
+
+# The provider is reachable but is not currently able to serve the request
+# (5xx, timeout, rate limit, or no status at all).
+STORY_MODEL_UNAVAILABLE = 50201
+
+# The provider rejected our request itself: retrying the same payload cannot
+# help.
+STORY_MODEL_REQUEST_REJECTED = 50202
+
+# The provider answered below 400 but the status was not the expected success
+# code, so the reply does not match the protocol we implemented.
+STORY_MODEL_PROTOCOL_ERROR = 50204
+
+# No API key is configured for this deployment.
+STORY_MODEL_NOT_CONFIGURED = 50301
+
+# The provider rejected our credentials.
+STORY_MODEL_CREDENTIALS_REJECTED = 50302
+
+# The provider account is out of balance, so no retry can succeed until it is
+# topped up.
+STORY_MODEL_INSUFFICIENT_BALANCE = 50303

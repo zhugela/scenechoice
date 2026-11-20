@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.clients.deepseek import DeepSeekClient
 from app.config import get_settings
 from app.db import get_session
-from app.errors import AppError
+from app.errors import AppError, STORY_MODEL_NOT_CONFIGURED
 from app.services.story_planner import StoryPlanner
 
 
@@ -17,7 +17,11 @@ def get_db_session() -> Generator[Session, None, None]:
 def get_story_planner() -> StoryPlanner:
     settings = get_settings()
     if settings.deepseek_api_key is None or not settings.deepseek_api_key.get_secret_value().strip():
-        raise AppError("story planning service is not configured", code=50301, status_code=503)
+        raise AppError(
+            "story planning service is not configured",
+            code=STORY_MODEL_NOT_CONFIGURED,
+            status_code=503,
+        )
     client = DeepSeekClient(
         api_key=settings.deepseek_api_key.get_secret_value(),
         base_url=settings.deepseek_base_url,

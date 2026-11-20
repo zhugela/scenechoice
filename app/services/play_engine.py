@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.blueprint_contract import BLUEPRINT_VERSION
 from app.models import (
     Choice,
     Ending,
@@ -29,7 +30,6 @@ from app.models import (
     StoryStatus,
 )
 from app.services.conditions import clamp_metric, conditions_all_match
-from app.services.story_store import BLUEPRINT_VERSION
 
 FINISHED_STATUSES = (StoryStatus.COMPLETED.value, StoryStatus.ABANDONED.value)
 

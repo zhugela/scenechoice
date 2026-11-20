@@ -342,3 +342,38 @@ def test_openapi_documents_version_and_corruption_codes(
     responses = schema["paths"]["/api/stories/{public_id}/play"]["post"]["responses"]
     assert "40902" in responses["409"]["description"]
     assert "50003" in responses["500"]["description"]
+
+
+def test_old_blueprint_version_is_rejected_identically_by_detail_and_play(
+    api_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """The detail and play gates are separate code paths; the contract is one.
+
+    Both entry points read the same stored column, so the same old archive must
+    answer the same ``(409, 40902)`` pair with the same human-readable message.
+    """
+    public_id = _create_story(session_factory)
+    with session_factory() as session:
+        session.execute(
+            text(
+                "UPDATE stories SET blueprint_version = 0 "
+                "WHERE public_id = :public_id"
+            ),
+            {"public_id": public_id},
+        )
+        session.commit()
+
+    detail = api_client.get(f"/api/stories/{public_id}")
+    play = api_client.post(
+        f"/api/stories/{public_id}/play", json={"choice_key": "e1_truth"}
+    )
+
+    for response in (detail, play):
+        body = response.json()
+        assert response.status_code == 409
+        assert body["code"] == 40902
+        assert body["message"] != "internal server error"
+        assert "blueprint version 0" in body["message"]
+        assert "supports version 1" in body["message"]
+
+    assert detail.json()["message"] == play.json()["message"]

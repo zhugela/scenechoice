@@ -9,14 +9,50 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：187 passed，合并 master 后需重跑确认）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：201 passed）
 - 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
-- 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 7 批（`sc-m2-07` 推进端点）与第 8 批（`sc-m2-08` 版本契约）代码已完成并验证，两批都在等负责人读懂门
+- 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 7/8/9 批（`sc-m2-07` 推进端点、`sc-m2-08` 版本契约、`sc-m2-09` 口径对齐）代码已完成并验证，**三批都在等负责人读懂门（队列 3 批）**；第 10 批（`sc-m2-10`）是纯收尾，无新用户可见行为，已 passing
 - 当前 blocker：M1 阶段门卡在"个人掌握"这一条，实现与真实评测两条已过
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 017（M2 第 10 批：只做收尾，不加新行为）
+
+- 日期：2026-11-20
+- 本轮目标（一句话）：补上 `save_blueprint` savepoint 分支的测试网、把剩下的业务码字面量收干净、给版本闸加一条双端一致性测试、把 `BLUEPRINT_VERSION` 挪到中立模块。**不加任何新用户可见行为**（读懂门队列已有 3 批）。
+- 执行方式：`PLAN.md` 写任务书 → Claude Code 一轮（4 分 24 秒）→ Hermes 独立复验 + 三次变异。
+- 基线：`98c3cc4`，`197 passed`。
+
+| 单元 | 文件 | 改了什么 | 为什么 |
+|---|---|---|---|
+| U1 savepoint 测试 | `tests/test_stories_api.py`（+129） | 三条：外层 rollback → 7 表 0 行；外层 commit → 整树落库；savepoint 内失败 → 外层仍可用且失败那棵零残留 | 评审 P2 点名「这个分支是第 3 批把保存嵌进更大事务的入口，零测试」 |
+| U1 顺带修的真 bug | `app/services/story_store.py` | 新增 `_start_outer_transaction()`：savepoint 分支里若 DBAPI 连接还没开事务（SQLite），先显式 `BEGIN` | **测试第一次跑就红**：pysqlite 懒开事务，调用方还没写过东西时，第一条语句就是我们的 `SAVEPOINT`；SQLite 对「由 savepoint 自己开启的事务」执行 `RELEASE` 时直接提交，调用方的 `rollback()` 变空操作 → docstring 承诺的 all-or-nothing 不成立。这是修 bug，不是改设计 |
+
+### U2 业务码收敛 / U3 双端一致性 / U4 契约常量
+
+| 单元 | 文件 | 改了什么 | 为什么 |
+|---|---|---|---|
+| U2 | `app/errors.py`、`provider_errors.py`、`api/stories.py`、`api/story_plans.py`、`dependencies.py` | 补齐 7 个 provider 侧常量（42201/50201/50202/50204/50301/50302/50303），全部改为引用；行为零变化 | `app/errors.py` 已是唯一来源，这些字面量是最后一批残留 |
+| U3 | `tests/test_play_api.py`（+35） | 一条：同一旧版本存档，详情与推进**两边**都 409 + 40902 | 版本闸有两处，之前没有任何测试同时打两边 |
+| U4 | `app/blueprint_contract.py`（新增）+ `story_store.py`、`play_engine.py` | `BLUEPRINT_VERSION` 挪到中立模块，`play_engine` 不再 import `story_store` | 上批遗留的风险：engine 为一个常量 import 整个 store，方向没有测试守着，反向 import 就会成环 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`201 passed, 1 warning in 7.44s`（基线 197，净增 4）
+  - `compileall app tests` → 通过；`.venv/Scripts/python.exe -c "import app.main"` → 通过
+  - **变异 H**（删掉 `_start_outer_transaction(session)` 调用）→ `1 failed, 200 passed`，红的正是 `test_save_blueprint_inside_outer_transaction_rolls_back_with_it`（证明这条测试真能抓住那个静默提交）
+  - **变异 I**（`begin_nested()` 改 `begin()`）→ `3 failed`，三条 savepoint 用例全红
+  - **变异 J**（详情接口版本闸换错异常）→ `1 failed`，红的正是双端一致性用例
+  - 三次还原后 `grep MUTATION app tests` 零残留，复跑 201 passed
+  - 单一来源：`grep -rn "42201\|50201\|50202\|50204\|50301\|50302\|50303" app/ --include=*.py` 只命中 `app/errors.py`（7 行）
+  - `grep -n "story_store" app/services/play_engine.py` → 零命中
+- 已知风险：
+  - 修复靠 pysqlite 的私有属性 `driver_connection.in_transaction` 判「是否已开事务」。SQLAlchemy 或 pysqlite 升级后要重看；非 SQLite 走 early return，**Postgres 上没验证过**（M2 没有 Postgres）。
+  - 「外层先写过一条 DML 再 savepoint」这条路径本来就没问题（Claude Code 单独验证过），现在也没有专门的测试钉住它；变异 H 只覆盖了「外层还没写」。
+  - 本轮破例允许改实现（PLAN 原本写「U1 只加测试」）：因为测试第一次就跑红，暴露的是真 bug 而不是测试写错。已按 playbook 第四节第 4 类（禁改清单越界要说清为什么）记录在此。
+  - 读懂门队列仍是 3 批（7/8/9），本批没有新增用户可见行为，所以不追加；但 `_start_outer_transaction` 这处修复是「最难自己看出来」的一段代码，建议列进读懂门的第 4 题。
+- 下一步最佳动作：M2 剩余 P3（WAL / busy_timeout、幂等键、时间戳带时区）都是**不加新玩法**的小口子，可继续；但更值得做的是先清读懂门。
 
 ### Session 016（M2 第 9 批：推进接口口径对齐）
 
