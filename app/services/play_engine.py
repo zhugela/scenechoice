@@ -56,6 +56,12 @@ class ChoiceNotInCurrentEpisode(PlayError):
     code = "choice_not_in_current_episode"
 
 
+class BrokenBlueprint(PlayError):
+    """Persisted data the engine cannot play; validation should have caught it."""
+
+    code = "broken_blueprint"
+
+
 class NoMatchingEnding(PlayError):
     """The blueprint passed reachability validation, so this means the data was changed by hand."""
 
@@ -76,11 +82,23 @@ class PlayOutcome:
 
 
 def current_episode(story: Story) -> Episode:
-    """The episode being played: the ``in_progress`` one, else episode 1 of a fresh story."""
-    for episode in sorted(story.episodes, key=lambda item: item.number):
+    """The episode being played: the ``in_progress`` one, else episode 1 of a fresh story.
+
+    Anything else (no episodes, or a story that claims to be in progress while
+    every episode is completed or still planned) is broken data, not player
+    input — say so instead of silently restarting at episode 1.
+    """
+    ordered = sorted(story.episodes, key=lambda item: item.number)
+    if not ordered:
+        raise BrokenBlueprint("story has no episodes", story=story.public_id)
+    for episode in ordered:
         if episode.status == EpisodeStatus.IN_PROGRESS.value:
             return episode
-    return min(story.episodes, key=lambda item: item.number)
+    if story.status == StoryStatus.READY.value and ordered[0].status == EpisodeStatus.PLANNED.value:
+        return ordered[0]
+    raise BrokenBlueprint(
+        "no episode is in progress", story=story.public_id, statuses={item.number: item.status for item in ordered}
+    )
 
 
 def _next_sequence(session: Session, story_id: int) -> int:
@@ -141,14 +159,16 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
     episode = current_episode(story)
     choice = next((item for item in episode.choices if item.key == choice_key), None)
     if choice is None:
-        played = any(
-            item.key == choice_key for other in story.episodes for item in other.choices if other is not episode
+        # 「已玩过」指该选择所属的那一集已经完成，而不是「这个 key 不在当前集里」。
+        owner = next(
+            (other for other in story.episodes for item in other.choices if item.key == choice_key), None
         )
         raise ChoiceNotInCurrentEpisode(
             "choice does not belong to the episode being played",
             episode=episode.number,
             choice=choice_key,
-            already_played=played,
+            already_played=owner is not None and owner.status == EpisodeStatus.COMPLETED.value,
+            owner_episode=owner.number if owner else None,
         )
 
     transaction = session.begin() if not session.in_transaction() else session.begin_nested()
@@ -180,9 +200,17 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
 
         metrics = {metric.key: metric for metric in story.metrics}
         for effect in choice.effects:
-            metric = metrics[effect["metric_key"]]
+            metric_key = effect.get("metric_key")
+            if metric_key not in metrics:
+                # 保存时 BlueprintValidator 已拦过；这里兜底，避免玩到一半抛裸 KeyError。
+                raise BrokenBlueprint("choice references an unknown metric", metric=metric_key, choice=choice.key)
+            metric = metrics[metric_key]
+            try:
+                delta = int(effect["delta"])
+            except (KeyError, ValueError, TypeError) as error:
+                raise BrokenBlueprint("choice effect has no usable delta", choice=choice.key, effect=effect) from error
             before = metric.current_value
-            after = clamp_metric(before + int(effect["delta"]))
+            after = clamp_metric(before + delta)
             metric.current_value = after
             changes.append(
                 _change(
@@ -190,7 +218,7 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
                     entity_key=metric.key,
                     event_type=StateChangeEventType.METRIC_CHANGED,
                     before={"current_value": before},
-                    after={"current_value": after, "delta": int(effect["delta"])},
+                    after={"current_value": after, "delta": delta},
                 )
             )
 
@@ -233,7 +261,11 @@ def advance_story(session: Session, public_id: str, choice_key: str) -> PlayOutc
             )
             story.status = StoryStatus.COMPLETED.value
         else:
-            upcoming = next(item for item in story.episodes if item.number == episode.number + 1)
+            upcoming = next((item for item in story.episodes if item.number == episode.number + 1), None)
+            if upcoming is None:
+                raise BrokenBlueprint(
+                    "episode numbers are not contiguous", after=episode.number, count=story.episode_count
+                )
             changes.append(
                 _change(
                     entity_type=StateChangeEntityType.EPISODE,

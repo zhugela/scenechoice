@@ -18,9 +18,8 @@ def _duplicates(values: list[str]) -> set[str]:
     return {value for value in values if values.count(value) > 1}
 
 
-def _condition_matches(operator: str, actual: int, expected: int) -> bool:
-    # 求值逻辑只有一份：app/services/conditions.py
-    return condition_matches(operator, actual, expected)
+# 求值逻辑只有一份：app/services/conditions.py（这里只是沿用旧名字，避免改一堆调用点）
+_condition_matches = condition_matches
 
 
 def _ending_reachable(ending: EndingBlueprint, metric_ids: list[str]) -> bool:

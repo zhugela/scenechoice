@@ -54,14 +54,23 @@ def conditions_all_match(
     conditions: Iterable[Condition | dict[str, object]], values: dict[str, int]
 ) -> bool:
     """True when every condition holds for the given metric values."""
-    return all(
-        condition_matches(
-            str(_read(condition, "operator")),
-            values[str(_read(condition, "metric_id"))],
-            int(_read(condition, "value")),
+    return all(_holds(condition, values) for condition in conditions)
+
+
+def _holds(condition: Condition | dict[str, object], values: dict[str, int]) -> bool:
+    metric_key = str(_read(condition, "metric_id"))
+    if metric_key not in values:
+        # 条件引用了已经不存在的指标（数据被手改、或蓝图被改名）：
+        # 当作「条件不成立」，让上层的「没有任何结局匹配」来处理，别在玩到一半崩。
+        return False
+    try:
+        return condition_matches(
+            str(_read(condition, "operator")), values[metric_key], int(_read(condition, "value"))
         )
-        for condition in conditions
-    )
+    except (KeyError, ValueError, TypeError):
+        # 持久化数据里的 operator 或 value 不合法（手工改库、旧版本遗留）：
+        # 当作条件不成立，让上层给出「没有任何结局匹配」，不要抛裸异常打断整局游戏。
+        return False
 
 
 def clamp_metric(value: int) -> int:

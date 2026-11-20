@@ -9,7 +9,7 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：184 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：187 passed，合并 master 后需重跑确认）
 - 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 7 批（`sc-m2-07` 推进端点）与第 8 批（`sc-m2-08` 版本契约）代码已完成并验证，两批都在等负责人读懂门
@@ -17,6 +17,23 @@
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 015（合并 origin/master，解 PR #6 冲突）
+
+- 触发：PR #6 建好后 GitHub 报 `CONFLICTING`。原因是 master 上另有两条线先落地——批次 6 的错误映射收敛（`55fd3cf` / `a77d599`）与 M3 选择执行引擎（`057a1f0` / `eac0a6d` / `50bc9ff`，经 PR #5 合入）。其中 M3 引擎与本分支 `b6d89c9` 的「play engine 服务层回滚点」是同一条河的两次改道。
+- 冲突 7 个文件，逐个判（类：disjoint / 同题两答 / 被取代）：
+
+| 文件 | 类 | 处置与理由 |
+|---|---|---|
+| `app/services/play_engine.py`（add/add） | 同题两答 | **取 master**：master 是超集（多 `BrokenBlueprint`、指标夹取、集数连续性校验），且带 `tests/test_play_engine.py` 344 行 + `test_play_engine_transaction.py` 93 行；本分支那份是 `b6d89c9` 明确标注的「仅作回滚点」 |
+| `app/services/conditions.py`（add/add） | 同题两答 | **取 master**：82 行版本同时服务 validator 与 engine，接口更完整 |
+| `tests/test_play_engine.py`（add/add） | 同题两答 | **取 master**：覆盖更全，本分支 10 条是它的子集 |
+| `app/services/blueprint_validator.py` | disjoint（同一意图） | 两侧都把 `_condition_matches` 改成转发 `conditions.py`；取 master 的一行别名（`_condition_matches = condition_matches`）比本分支的包装函数更短。**副产品**：Session 013 挂着的「validator 越界改动待确认」现在有独立证据——两条线各自独立做了同一处收敛，予以保留 |
+| `PLAN.md`、`docs/harness/feature_list.json`、`docs/harness/progress.md` | 被取代 | **保留本分支**：master 侧是批次 6 的旧任务书（已归档在 `docs/exec-plans/completed/PLAN-m2-batch6-error-mapping.md`），本分支带着 Session 014 与批次 8 的新记录 |
+| `app/api/stories.py`、`tests/test_stories_api.py`、`tests/test_retryable_status_source.py`、`app/services/provider_errors.py` | disjoint | git 自动合并，无需人工介入 |
+
+- 合并后验证：`.venv/Scripts/python.exe -m pytest -q` → **194 passed, 1 warning in 7.12s**（187 + master 带来的 engine/transaction 测试）
+- 合并顺带暴露两条待办（进批次 9）：master 的引擎会抛 `BrokenBlueprint`（存档内部不一致，如选项引用了不存在的指标），`play_errors` 目前没映射它 → 落到 50002 兜底网；另外推进接口仍不校验 `blueprint_version`，与详情接口口径不一致。
 
 ### Session 014
 
