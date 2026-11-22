@@ -3,12 +3,12 @@
 > 这份文件解决一个具体困惑：仓库里同时有几个「机器人」在评论，很容易记混谁装的、谁在干什么。
 > 最后核对：2026-11-22。
 
-## 现在的分工（2026-11-22 起）
+## 三个审查，各管一段
 
 | 名称 | 评论者 | 谁做的 | 触发点 | 它能看见什么 | 花钱吗 |
 |---|---|---|---|---|---|
 | **CI** | —（只给状态） | 项目自带（M0 就有） | 每次 push / PR | 跑 `pytest -q` | 免费 |
-| **~~AI Review~~（已停用）** | ~~`github-actions[bot]`~~ | Hermes 写的（`1060518`，2026-11-18）→ **2026-11-22 按主人决定删除 workflow** | — | — | 0 |
+| **AI Review** | `github-actions[bot]` | **Hermes 写的**（提交 `1060518` 起，2026-11-18） | PR 打开/更新；CI 失败后诊断 | diff + 改动文件全文 | 每次 ≈ 3 万 token（¥0.1 级） |
 | **Codex** | `chatgpt-codex-connector[bot]` | **GitHub App，仓库原有**，不是任何人装的 | 每个 PR | 只有 diff | 免费（走你的 ChatGPT 订阅） |
 | **本机巡检** | 聊天里回你 | **Hermes 的 cron 任务** `f0b0cd805e33` | master 测试变红 | 能真跑测试、能看整仓 | 绿了 0 成本；红了 ≈ ¥1-2 |
 
@@ -30,15 +30,7 @@
 三个里唯一纯重复的是 Codex：每个 PR 固定一条 1211 字符的 summary，几乎不指出具体问题
 （对比 AI Review 单条 3000～6000 字符、带 `文件:函数` 定位）。
 
-**结论（2026-11-22）**：主人判断 AI Review 信噪比低，**停用的是 AI Review，保留 Codex**。
-workflow 已删（`git log -- .github/workflows/ai-review.yml` 可回溯），`scripts/ai_review.py` 保留，
-需要时手动跑：
-
-```bash
-python scripts/ai_review.py pr --number 12 --dry-run     # 只打印，不发评论
-```
-
-原计划「关 Codex」的两条路径留档，将来想换回来照做：
+关掉它两条路，任选一条：
 
 1. **GitHub App 设置**（一次到位）
    <https://github.com/settings/installations> → `ChatGPT Codex Connector` → **Configure** →
