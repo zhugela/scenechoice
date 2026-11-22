@@ -295,10 +295,10 @@
         "grep -rn \"40903|40904\" app/ --include=*.py"
       ],
       "evidence": [
-        "2026-11-22 基线 f2a386b → 210 passed；收工 pytest -q → 219 passed, 2 warnings in 14.04s（净增 9）",
+        "2026-11-22 基线 f2a386b → 210 passed；收工 pytest -q → 220 passed, 2 warnings in 16.69s（净增 10）",
         "2026-11-22 alembic upgrade head 真实执行成功；alembic check → No new upgrade operations detected",
-        "2026-11-22 变异 O（去掉 fingerprint 比较）→ 1 failed（同 key 换 body 用例）；变异 P（失败路径去掉 release）→ 2 failed（含失败后可重试）；还原后复跑 219 passed",
-        "2026-11-22 新增 tests/test_idempotency.py 9 条；迁移 20261122_0003 只加不改",
+        "2026-11-22 变异 O（去掉 fingerprint 比较）→ 1 failed（同 key 换 body 用例）；变异 P（失败路径去掉 release）→ 2 failed（含失败后可重试）；还原后复跑 220 passed",
+        "2026-11-22 新增 tests/test_idempotency.py 10 条；迁移 20261122_0003 只加不改",
         "2026-11-22 Hermes 把 tests/test_migrations.py 的硬编码 head 断言改成动态 _head_revision()（Claude Code 原本直接改了已有断言里的版本号）"
       ],
       "notes": "Claude Code 实现，Hermes 复验。遗留：CancelledError 不走 release（key 会 pending 至多 10 分钟）；completed 记录无 TTL 清理；回放的是存下来的响应体，响应里若加「当前进度」这类字段会过期。"

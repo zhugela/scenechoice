@@ -32,15 +32,15 @@
 | `app/services/idempotency.py`（新增，339 行） | `request_fingerprint`（规范化 JSON + sha256）、`claim`（两轮：读→判；插入撞唯一约束则 rollback 后重读赢家）、`_reset_stale`（`UPDATE ... WHERE state='pending' AND updated_at < cutoff`，`rowcount==1` 才算抢到）、`complete` / `release`（`WHERE` 带 ownership token） | 并发下不能把 `IntegrityError` 抛成 500；10 分钟过期要能重置但不能两个请求同时重置；生成超时的旧请求不能覆盖别人的响应 |
 | `app/api/stories.py` | 读 `Idempotency-Key` 头；`mismatch→409/40903`、`in_progress→409/40904`、`replay→原状态码+响应体+`Idempotent-Replay: true``、`claimed→生成→complete`；失败路径 `release`；把生成逻辑抽成 `_plan_and_store` | 无 key 时行为必须与之前完全一致，所以只有"带 key"这条路进新逻辑 |
 | `app/errors.py` | 新增 `IDEMPOTENCY_KEY_REUSED = 40903`、`IDEMPOTENCY_IN_PROGRESS = 40904` | 业务码唯一来源规则 |
-| `tests/test_idempotency.py`（新增 9 条） | 回放同一 public_id、换 body 409、pending 未过期 409、过期重置、无 key 照旧两份、失败释放、超长 key 422、并发撞唯一约束、迁移建表唯一约束 | 覆盖 PLAN 第七节全部验收点 |
+| `tests/test_idempotency.py`（新增 10 条） | 回放同一 public_id、换 body 409、pending 未过期 409、过期重置、无 key 照旧两份、失败释放、超长 key 422、并发撞唯一约束、迁移建表唯一约束 | 覆盖 PLAN 第七节全部验收点 |
 | `tests/test_migrations.py`（Hermes 修正） | 把硬编码的 `assert revision == "20261122_0003"` 改成 `_head_revision()`（读 alembic script directory 的 head） | Claude Code 为了让测试过，直接把已有断言里的迁移版本号改掉了 —— 这违反了"不许改已有测试预期"，而且每加一条迁移都要再改一次，审查时还会被标成可疑改动。改成动态取 head 后，这类改动不再需要动测试 |
 
 - 验证证据（Hermes 实跑）：
-  - 全量：`219 passed, 2 warnings in 14.04s`（基线 210，净增 9）
+  - 全量：`220 passed, 2 warnings in 16.69s`（基线 210，净增 10）
   - `.venv/Scripts/python.exe -m alembic upgrade head` → 真实执行成功；`alembic check` → `No new upgrade operations detected.`
   - **变异 O**（`_judge` 里去掉 fingerprint 比较）→ `1 failed`，红的正是"同 key 换 body → 409/40903"
   - **变异 P**（失败路径去掉 `release`）→ `2 failed`，含"失败后同 key 可重试"
-  - 还原后 `grep MUTATION` 零残留，复跑 219 passed
+  - 还原后 `grep MUTATION` 零残留，复跑 220 passed
   - `grep -rn "40903\|40904" app/` → 只命中 `app/errors.py`
 - 已知风险：
   - `asyncio.CancelledError` 属 `BaseException`，请求被取消时不走 `release()`，该 key 会 pending 最多 10 分钟（Claude Code 自己登记的）。
