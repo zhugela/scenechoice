@@ -9,7 +9,7 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：201 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-22：210 passed）
 - 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 7/8/9 批（`sc-m2-07` 推进端点、`sc-m2-08` 版本契约、`sc-m2-09` 口径对齐）代码已完成并验证，**三批都在等负责人读懂门（队列 3 批）**；第 10 批（`sc-m2-10`）是纯收尾，无新用户可见行为，已 passing
@@ -17,6 +17,24 @@
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 020（M2 第 13 批：时间戳带时区）
+
+- 日期：2026-11-22
+- 目标：对外时间戳从 SQLite 读回的 naive UTC 恢复为带 `+00:00` 的 aware UTC，字段、状态码、业务码与 message 全部不变。
+- 基线：`e6160e2` + 当前 PLAN 工作区，`pytest -q` → `207 passed`。
+- 改动：`app/models/base.py` 新增 `as_utc()`；`app/api/stories.py` 的列表摘要与状态变化时间戳经它归一化；`app/schemas/stories.py` 用 JSON `field_serializer` 输出显式 UTC 偏移；新增 3 条时间戳测试；`docs/RELIABILITY.md` 写明 API 时间戳契约。
+- 验证：
+  - 全量：`.venv/Scripts/python.exe -m pytest -q` → `210 passed, 1 warning in 9.35s`
+  - `.venv/Scripts/python.exe -m compileall -q app tests` → 通过
+  - 变异：`as_utc()` 临时改为原样返回 → 新增 3 条用例全红；还原后全量复跑绿
+  - TestClient 手工样例：`created_at=2026-11-22T03:14:35.077118+00:00`
+- 环境说明：Git Bash 的 `init.sh` 因共享 `uv` 缓存锁权限失败；pytest 使用 `.pytest-cache/harness-tmp` 并设置 `TEMP`/`TMP`/`PYTEST_DEBUG_TEMPROOT` 避开全局临时目录权限错误。
+- **实现方变化**：`claude` CLI 的原生二进制损坏（`claude native binary not installed`），本批由 codex 实现，Hermes 独立复验。
+- **Hermes 复验后的一处否决**：codex 在 `app/schemas/stories.py` 加了两处 `field_serializer`，只为把 Pydantic 默认的 `Z` 改成 `+00:00` —— 代价是 `app/schemas` 反向 import `app/models`（分层倒置）+ 序列化里用 `assert`（`-O` 下会被剥掉）。收益仅是观感，已删除；契约改为「必须带偏移，`Z` 与 `+00:00` 都合法」。
+- Hermes 复验：`pytest -q` → `210 passed, 1 warning in 8.89s`；`compileall` 通过；**变异 N**（`as_utc()` 改成直接返回入参）→ `3 failed`（三条新用例全红），还原后零残留、复跑 210 passed。
+- 未做：未执行 `git add` / `git commit` / `git push`。
+- 下一步最佳动作：M2 剩余 P3 只剩 POST 幂等键；读懂门队列仍是 3 批（7/8/9），更该先清。
 
 ### Session 019（M2 第 12 批：SQLite 并发与持久化设置）
 

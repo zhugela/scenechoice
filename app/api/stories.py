@@ -13,6 +13,7 @@ from app.errors import (
     STORY_VERSION_UNSUPPORTED,
 )
 from app.models import Story
+from app.models.base import as_utc
 from app.schemas.response import ApiResponse
 from app.schemas.stories import (
     CreateStoryRequest,
@@ -58,8 +59,8 @@ def _summary(story: Story) -> StorySummary:
         theme=story.theme,
         episode_count=story.episode_count,
         status=story.status,
-        created_at=story.created_at,
-        updated_at=story.updated_at,
+        created_at=as_utc(story.created_at),
+        updated_at=as_utc(story.updated_at),
     )
 
 
@@ -167,7 +168,7 @@ def get_story_state(
                     before_state=change.before_state,
                     after_state=change.after_state,
                     source=change.source,
-                    occurred_at=change.occurred_at,
+                    occurred_at=as_utc(change.occurred_at),
                 )
                 for change in recent_changes
             ],

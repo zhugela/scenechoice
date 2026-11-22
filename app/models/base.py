@@ -39,6 +39,21 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc(value: datetime | None) -> datetime | None:
+    """Restore the UTC timezone label on a timestamp read from persistence.
+
+    This is the read-side counterpart of :func:`utcnow`: write timestamps in
+    UTC, then restore the UTC label on read. Naive values are treated as UTC
+    wall-clock time, while aware values are converted to UTC without changing
+    the instant. ``None`` stays ``None``.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class Base(DeclarativeBase):
     """Single metadata object used by Alembic autogenerate and migrations."""
 

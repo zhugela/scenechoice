@@ -16,6 +16,9 @@
 
 - WAL lets readers and the writer proceed without blocking each other, but **writes are still single-writer**. Two processes writing at the same time queue for up to `SQLITE_BUSY_TIMEOUT_MS` (5s, `app/db.py`); after that the loser gets `database is locked`. `busy_timeout` is the lock-wait deadline, not SQLAlchemy's connect timeout.
 - WAL adds `-wal` and `-shm` files next to the database. Both are git-ignored (`.gitignore`: `*.db-wal`, `*.db-shm`). Any backup or copy of the database must include them, or run `PRAGMA wal_checkpoint(TRUNCATE)` first.
+- 时间戳契约：库里存 UTC（`app/models/base.py:utcnow`），读回时由 `as_utc()` 补回 UTC 标签，
+  对外一律输出**带偏移**的 ISO-8601 —— `2026-11-20T09:12:33.123456Z` 或 `+00:00` 都算合法，
+  唯一不可接受的是没有偏移的裸串（客户端会按自己的本地时区解释）。
 - This section matters at M3: before moving to multiple worker processes or containers, re-read it. WAL does not make SQLite a multi-writer store; a single writer (or serialized writes) remains the safe assumption.
 
 ## Error classification (`DeepSeekClient`)
