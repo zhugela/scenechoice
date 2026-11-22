@@ -9,7 +9,7 @@
 
 - 仓库根目录：`D:\zhugela-hub\scenechoice`
 - 标准启动路径：`.venv/Scripts/python.exe -m uvicorn app.main:app --reload`
-- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-20：201 passed）
+- 标准验证路径：`.venv/Scripts/python.exe -m pytest -q`（2026-11-22：210 passed）
 - 自动检查：push/PR 走 `.github/workflows/ci.yml` + `.github/workflows/ai-review.yml`（AI 审查 + CI 失败诊断），说明见 `docs/harness/ai-review.md`
 - 一键体检：`./docs/harness/init.sh`（在 git-bash 里跑；会装依赖 + 跑全部测试 + 打印启动命令）。`check.ps1` 当前有仓库根定位 bug，修复前请勿作为有效体检依据
 - 当前最高优先级未完成功能：`sc-m1-03` 负责人个人掌握验收（学习清单 6 项未勾）；M2 第 7/8/9 批（`sc-m2-07` 推进端点、`sc-m2-08` 版本契约、`sc-m2-09` 口径对齐）代码已完成并验证，**三批都在等负责人读懂门（队列 3 批）**；第 10 批（`sc-m2-10`）是纯收尾，无新用户可见行为，已 passing
@@ -17,6 +17,55 @@
 - M2 第 1 批数据层骨架（2026-11-15）：已建库验证；SQLAlchemy 2.1.8 + Alembic 1.20.1，迁移 `20261115_0001`，7 张业务表 + 1 张 Alembic 记账表，`alembic check` 无差异，121 passed
 
 ## 会话记录
+
+### Session 021（M2 第 14 批：POST 幂等键，方案 A）
+
+- 日期：2026-11-22
+- 目标：`POST /api/stories` 接受 `Idempotency-Key`，同一 key 重发回放首次响应、不重复扣 token、不重复建存档。负责人当天选 A。
+- 执行：Claude Code 一轮（4 分 22 秒，中途 codex 那轮被中止、工作区零残留）→ Hermes 复验 + 两次变异 + 一处测试改法修正。
+- 基线：`f2a386b`，`210 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `app/models/idempotency.py`（新增，76 行） | `idempotency_records` 表：`(scope,key)` 唯一、`fingerprint`、`state`（pending/completed）、`status_code`、`response_body`、时间戳 | 回放要先能存下"第一次的响应长什么样"；`scope` 防不同端点共用同一个 key 撞车 |
+| `alembic/versions/20261122_0003_add_idempotency_records.py`（新增） | 建表 + 唯一约束 | 迁移只加不改，已发布的两个版本没动 |
+| `app/services/idempotency.py`（新增，339 行） | `request_fingerprint`（规范化 JSON + sha256）、`claim`（两轮：读→判；插入撞唯一约束则 rollback 后重读赢家）、`_reset_stale`（`UPDATE ... WHERE state='pending' AND updated_at < cutoff`，`rowcount==1` 才算抢到）、`complete` / `release`（`WHERE` 带 ownership token） | 并发下不能把 `IntegrityError` 抛成 500；10 分钟过期要能重置但不能两个请求同时重置；生成超时的旧请求不能覆盖别人的响应 |
+| `app/api/stories.py` | 读 `Idempotency-Key` 头；`mismatch→409/40903`、`in_progress→409/40904`、`replay→原状态码+响应体+`Idempotent-Replay: true``、`claimed→生成→complete`；失败路径 `release`；把生成逻辑抽成 `_plan_and_store` | 无 key 时行为必须与之前完全一致，所以只有"带 key"这条路进新逻辑 |
+| `app/errors.py` | 新增 `IDEMPOTENCY_KEY_REUSED = 40903`、`IDEMPOTENCY_IN_PROGRESS = 40904` | 业务码唯一来源规则 |
+| `tests/test_idempotency.py`（新增 10 条） | 回放同一 public_id、换 body 409、pending 未过期 409、过期重置、无 key 照旧两份、失败释放、超长 key 422、并发撞唯一约束、迁移建表唯一约束 | 覆盖 PLAN 第七节全部验收点 |
+| `tests/test_migrations.py`（Hermes 修正） | 把硬编码的 `assert revision == "20261122_0003"` 改成 `_head_revision()`（读 alembic script directory 的 head） | Claude Code 为了让测试过，直接把已有断言里的迁移版本号改掉了 —— 这违反了"不许改已有测试预期"，而且每加一条迁移都要再改一次，审查时还会被标成可疑改动。改成动态取 head 后，这类改动不再需要动测试 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`220 passed, 2 warnings in 16.69s`（基线 210，净增 10）
+  - `.venv/Scripts/python.exe -m alembic upgrade head` → 真实执行成功；`alembic check` → `No new upgrade operations detected.`
+  - **变异 O**（`_judge` 里去掉 fingerprint 比较）→ `1 failed`，红的正是"同 key 换 body → 409/40903"
+  - **变异 P**（失败路径去掉 `release`）→ `2 failed`，含"失败后同 key 可重试"
+  - 还原后 `grep MUTATION` 零残留，复跑 220 passed
+  - `grep -rn "40903\|40904" app/` → 只命中 `app/errors.py`
+- 已知风险：
+  - `asyncio.CancelledError` 属 `BaseException`，请求被取消时不走 `release()`，该 key 会 pending 最多 10 分钟（Claude Code 自己登记的）。
+  - `completed` 记录没有清理任务：表会一直长。M3 前要加 TTL 清理（例如按 `created_at < now - 7d` 删除）。
+  - 回放的是**存下来的响应体**，不含后续状态变化；如果将来响应里加"当前进度"这类字段，回放就会过期。
+  - 幂等只在单进程内靠数据库唯一约束保证；多进程同样成立（约束在库里），但没有真起进程的并发测试。
+- 下一步最佳动作：M2 的功能项到此齐了。剩下的是人的关：读懂门队列 3 批（7/8/9），以及 M3 前的清理任务（幂等表 TTL、secret/ownership 方案）。
+
+### Session 020（M2 第 13 批：时间戳带时区）
+
+- 日期：2026-11-22
+- 目标：对外时间戳从 SQLite 读回的 naive UTC 恢复为带 `+00:00` 的 aware UTC，字段、状态码、业务码与 message 全部不变。
+- 基线：`e6160e2` + 当前 PLAN 工作区，`pytest -q` → `207 passed`。
+- 改动：`app/models/base.py` 新增 `as_utc()`；`app/api/stories.py` 的列表摘要与状态变化时间戳经它归一化；`app/schemas/stories.py` 用 JSON `field_serializer` 输出显式 UTC 偏移；新增 3 条时间戳测试；`docs/RELIABILITY.md` 写明 API 时间戳契约。
+- 验证：
+  - 全量：`.venv/Scripts/python.exe -m pytest -q` → `210 passed, 1 warning in 9.35s`
+  - `.venv/Scripts/python.exe -m compileall -q app tests` → 通过
+  - 变异：`as_utc()` 临时改为原样返回 → 新增 3 条用例全红；还原后全量复跑绿
+  - TestClient 手工样例：`created_at=2026-11-22T03:14:35.077118+00:00`
+- 环境说明：Git Bash 的 `init.sh` 因共享 `uv` 缓存锁权限失败；pytest 使用 `.pytest-cache/harness-tmp` 并设置 `TEMP`/`TMP`/`PYTEST_DEBUG_TEMPROOT` 避开全局临时目录权限错误。
+- **实现方变化**：`claude` CLI 的原生二进制损坏（`claude native binary not installed`），本批由 codex 实现，Hermes 独立复验。
+- **Hermes 复验后的一处否决**：codex 在 `app/schemas/stories.py` 加了两处 `field_serializer`，只为把 Pydantic 默认的 `Z` 改成 `+00:00` —— 代价是 `app/schemas` 反向 import `app/models`（分层倒置）+ 序列化里用 `assert`（`-O` 下会被剥掉）。收益仅是观感，已删除；契约改为「必须带偏移，`Z` 与 `+00:00` 都合法」。
+- Hermes 复验：`pytest -q` → `210 passed, 1 warning in 8.89s`；`compileall` 通过；**变异 N**（`as_utc()` 改成直接返回入参）→ `3 failed`（三条新用例全红），还原后零残留、复跑 210 passed。
+- 未做：未执行 `git add` / `git commit` / `git push`。
+- 下一步最佳动作：M2 剩余 P3 只剩 POST 幂等键；读懂门队列仍是 3 批（7/8/9），更该先清。
 
 ### Session 019（M2 第 12 批：SQLite 并发与持久化设置）
 

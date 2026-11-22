@@ -120,6 +120,7 @@ from app.models.enums import (
     StoryStatus,
 )
 from app.models.episode import Episode
+from app.models.idempotency import IdempotencyRecord
 from app.models.metric import Metric
 from app.models.state_change import StoryStateChange
 from app.models.story import Story
@@ -132,6 +133,7 @@ __all__ = [
     "EndingCategory",
     "Episode",
     "EpisodeStatus",
+    "IdempotencyRecord",
     "Metric",
     "StateChangeEntityType",
     "StateChangeEventType",

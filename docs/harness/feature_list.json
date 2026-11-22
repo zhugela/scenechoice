@@ -1,6 +1,6 @@
 {
   "project": "scenechoice",
-  "last_updated": "2026-11-20",
+  "last_updated": "2026-11-22",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -260,6 +260,48 @@
         "2026-11-20 新增 tests/test_db_settings.py 3 条：文件库 WAL+busy_timeout、内存库跳过 WAL 仍设 busy_timeout、两个连接各读一次"
       ],
       "notes": "Hermes 把 Claude Code 写的 `except Exception` 收窄成 (SQLAlchemyError, sqlite3.Error, OSError)：库/文件系统问题仍不阻止启动，代码 bug 会当场炸。遗留：engine 导入时即连库（不再是惰性）；没有多进程并发写的实测。"
+    },
+    {
+      "id": "sc-m2-13",
+      "priority": 14,
+      "area": "m2-contract",
+      "title": "对外时间戳统一为带偏移的 UTC",
+      "user_visible_behavior": "故事列表的 created_at/updated_at 与状态历史的 occurred_at 都返回带偏移的 ISO 时间戳（`Z` 或 `+00:00`），客户端不再按本地时区误解析。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests"
+      ],
+      "evidence": [
+        "2026-11-22 基线 207 passed；收工 pytest -q → 210 passed, 1 warning in 9.35s（净增 3 条）",
+        "新增用例：test_story_list_timestamps_are_utc_with_explicit_offset、test_story_state_change_occurred_at_is_utc_with_explicit_offset、test_as_utc_normalizes_naive_aware_and_none",
+        "变异：as_utc() 临时改为原样返回 → 3 failed；还原后复跑 210 passed",
+        "TestClient POST /api/stories → GET /api/stories 实响应：created_at=2026-11-22T03:14:35.077118+00:00",
+        "compileall app tests 通过；禁改目录 app/services、story_blueprint.py、models 其余文件、alembic、requirements.txt diff 为空"
+      ],
+      "notes": "实现方换成 codex（claude CLI 原生二进制损坏，未修）。Hermes 复验后**删掉了 codex 加的 schema field_serializer**：它为了把 Pydantic 默认的 Z 硬改成 +00:00，让 app/schemas 反向 import app/models，还在序列化里用 assert —— 收益是纯观感，代价是分层倒置。现在 Z 与 +00:00 都算合法，测试断言改为「必须带偏移且偏移为 0」。"
+    },
+    {
+      "id": "sc-m2-14",
+      "priority": 15,
+      "area": "m2-reliability",
+      "title": "POST 幂等键（Idempotency-Key，方案 A）",
+      "user_visible_behavior": "同一个 Idempotency-Key 重发时，服务端回放第一次的响应（并带 Idempotent-Replay: true），不会再生成第二份存档、不会再扣一次 token；同一个 key 换了请求内容返回 409/40903，上一次还在处理返回 409/40904。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m alembic upgrade head",
+        ".venv/Scripts/python.exe -m alembic check",
+        "grep -rn \"40903|40904\" app/ --include=*.py"
+      ],
+      "evidence": [
+        "2026-11-22 基线 f2a386b → 210 passed；收工 pytest -q → 220 passed, 2 warnings in 16.69s（净增 10）",
+        "2026-11-22 alembic upgrade head 真实执行成功；alembic check → No new upgrade operations detected",
+        "2026-11-22 变异 O（去掉 fingerprint 比较）→ 1 failed（同 key 换 body 用例）；变异 P（失败路径去掉 release）→ 2 failed（含失败后可重试）；还原后复跑 220 passed",
+        "2026-11-22 新增 tests/test_idempotency.py 10 条；迁移 20261122_0003 只加不改",
+        "2026-11-22 Hermes 把 tests/test_migrations.py 的硬编码 head 断言改成动态 _head_revision()（Claude Code 原本直接改了已有断言里的版本号）"
+      ],
+      "notes": "Claude Code 实现，Hermes 复验。遗留：CancelledError 不走 release（key 会 pending 至多 10 分钟）；completed 记录无 TTL 清理；回放的是存下来的响应体，响应里若加「当前进度」这类字段会过期。"
     }
   ]
 }

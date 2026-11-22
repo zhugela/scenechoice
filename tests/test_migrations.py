@@ -10,6 +10,23 @@ from sqlalchemy import create_engine, text
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _head_revision() -> str:
+    """The migration head, read from the script directory instead of hardcoded.
+
+    Pinning a literal here means every new migration has to edit this test, and
+    a reviewer then sees "an existing test expectation changed" on a change that
+    is innocuous. Heading the chain is what this assertion really cares about.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(PROJECT_ROOT / "alembic"))
+    head = ScriptDirectory.from_config(config).get_current_head()
+    assert head is not None, "the migration chain has no head"
+    return head
+
+
 def _run_alembic(database_url: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["SCENECHOICE_DATABASE_URL"] = database_url
@@ -95,7 +112,7 @@ def test_endings_position_upgrade_keeps_existing_data_and_priority_fallback(
     finally:
         engine.dispose()
 
-    assert revision == "20261116_0002"
+    assert revision == _head_revision()
     assert endings == [
         ("quit", 1, 0),
         ("comeback", 2, 0),

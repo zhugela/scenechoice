@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +25,7 @@ from app.models import (
     Story,
     StoryStateChange,
 )
+from app.models.base import as_utc
 from app.schemas.stories import CreateStoryRequest
 from app.schemas.story_blueprint import StoryBlueprint
 from app.services.story_planner import StoryPlanner, StoryPlanningError
@@ -881,3 +883,61 @@ def test_savepoint_failure_leaves_outer_transaction_usable_and_no_residue(
         "endings": 3,
         "story_state_changes": 1,
     }
+
+
+def test_story_list_timestamps_are_utc_with_explicit_offset(
+    api_client: TestClient,
+) -> None:
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    response = api_client.get("/api/stories")
+
+    assert response.status_code == 200
+    item = next(
+        candidate
+        for candidate in response.json()["data"]["items"]
+        if candidate["public_id"] == created["public_id"]
+    )
+    for field in ("created_at", "updated_at"):
+        # UTC may be written as ``Z`` or ``+00:00``; both are unambiguous
+        # ISO-8601. What matters is that an offset is present at all, because
+        # a bare naive string is what made clients guess their own timezone.
+        assert item[field].endswith(("Z", "+00:00")), item[field]
+        assert datetime.fromisoformat(item[field]).utcoffset() == timedelta(0)
+
+
+def test_story_state_change_occurred_at_is_utc_with_explicit_offset(
+    api_client: TestClient,
+) -> None:
+    created = api_client.post(
+        "/api/stories",
+        json={"inspiration": "一个小主播误开麦后被恶意剪辑", "episode_count": 3},
+    ).json()["data"]
+
+    response = api_client.get(f"/api/stories/{created['public_id']}/state")
+
+    assert response.status_code == 200
+    occurred_at = response.json()["data"]["recent_state_changes"][0]["occurred_at"]
+    assert occurred_at.endswith(("Z", "+00:00")), occurred_at
+    assert datetime.fromisoformat(occurred_at).utcoffset() == timedelta(0)
+
+
+def test_as_utc_normalizes_naive_aware_and_none() -> None:
+    naive = datetime(2026, 11, 20, 1, 12, 33, 123456)
+    aware = datetime(
+        2026,
+        11,
+        20,
+        9,
+        12,
+        33,
+        123456,
+        tzinfo=timezone(timedelta(hours=8)),
+    )
+
+    assert as_utc(naive) == naive.replace(tzinfo=timezone.utc)
+    assert as_utc(aware) == naive.replace(tzinfo=timezone.utc)
+    assert as_utc(None) is None
