@@ -25,7 +25,7 @@
 
 一句话：**评论是 `github-actions[bot]` 发的 = AI Review（我写的）；是 `zhugela` 发的 = superagent（还没跑起来）；是 `chatgpt-codex-connector` 发的 = Codex（仓库原有）。**
 
-## 要不要关掉 Codex
+## Codex：已关（2026-11-22 确认）
 
 三个里唯一纯重复的是 Codex：每个 PR 固定一条 1211 字符的 summary，几乎不指出具体问题
 （对比 AI Review 单条 3000～6000 字符、带 `文件:函数` 定位）。
@@ -37,6 +37,10 @@
    Repository access 里取消勾选 `scenechoice`（或直接 Uninstall）。
 2. **Codex 自己的开关**
    <https://chatgpt.com/codex/cloud/settings/general> → 关掉这个仓库的自动 code review。
+
+**状态（2026-11-22 实测）**：Codex 已关。探针 PR #9 上只有 `github-actions[bot]` 评论，
+`chatgpt-codex-connector` 零评论。注意：关掉 App 只影响「以后还审不审」，
+**已发出的评论是历史，不会消失**（PR #8 那条就是关之前 9 秒生成的）。
 
 关完剩下两个，职责不重叠：
 
