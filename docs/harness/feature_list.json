@@ -241,6 +241,25 @@
         "2026-11-20 grep：app/api/play.py 无 session.commit()；app/ 内无 blueprint_version != （比较只剩 blueprint_contract.version_is_supported）"
       ],
       "notes": "源自 PR #6 的 AI 审查（2 条阻塞，Hermes 过滤后全部采纳）。最大的收获不是审查那两条，而是回灌时发现「推进落库曾依赖 SQLite savepoint 释放会提交」这一隐式依赖——已改成引擎显式 commit 并用 in_transaction() 断言钉住。遗留：引擎无条件 commit（将来要组合事务需加参数）。"
+    },
+    {
+      "id": "sc-m2-12",
+      "priority": 13,
+      "area": "m2-infra",
+      "title": "SQLite 并发与持久化设置（WAL + busy_timeout）",
+      "user_visible_behavior": "对外行为零变化。运维侧效果：并发写不再立刻撞 database is locked（等锁 5s 再报），库切到 WAL 后读写不互相阻塞，且有文档写明单写者假设。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        "grep -rn \"busy_timeout|journal_mode\" app/ --include=*.py"
+      ],
+      "evidence": [
+        "2026-11-20 基线 0aaa272 → 204 passed；收工 `pytest -q` → 207 passed, 1 warning in 8.92s",
+        "2026-11-20 变异 L（SQLITE_BUSY_TIMEOUT_MS 改 0）→ 1 failed；变异 M（删 WAL 切换调用）→ 1 failed；还原后零残留、复跑 207 passed",
+        "2026-11-20 `grep -rn \"busy_timeout|journal_mode\" app/ --include=*.py` 只命中 app/db.py；仓库根无 -wal/-shm 残留",
+        "2026-11-20 新增 tests/test_db_settings.py 3 条：文件库 WAL+busy_timeout、内存库跳过 WAL 仍设 busy_timeout、两个连接各读一次"
+      ],
+      "notes": "Hermes 把 Claude Code 写的 `except Exception` 收窄成 (SQLAlchemyError, sqlite3.Error, OSError)：库/文件系统问题仍不阻止启动，代码 bug 会当场炸。遗留：engine 导入时即连库（不再是惰性）；没有多进程并发写的实测。"
     }
   ]
 }
