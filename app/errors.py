@@ -30,6 +30,15 @@ STORY_FINISHED = 40901
 # error.
 STORY_VERSION_UNSUPPORTED = 40902
 
+# The same Idempotency-Key was presented with a different request body. The
+# original response belongs to the original payload, so replaying it would be
+# wrong and accepting the new payload would double-charge the model.
+IDEMPOTENCY_KEY_REUSED = 40903
+
+# Another request with the same Idempotency-Key is still generating. The
+# client should wait and retry rather than start a second generation.
+IDEMPOTENCY_IN_PROGRESS = 40904
+
 # The blueprint passed reachability validation, so an unmatched end state means
 # the archive was changed outside the API: a server-side fault.
 NO_MATCHING_ENDING = 50001

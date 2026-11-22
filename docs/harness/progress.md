@@ -18,6 +18,37 @@
 
 ## 会话记录
 
+### Session 021（M2 第 14 批：POST 幂等键，方案 A）
+
+- 日期：2026-11-22
+- 目标：`POST /api/stories` 接受 `Idempotency-Key`，同一 key 重发回放首次响应、不重复扣 token、不重复建存档。负责人当天选 A。
+- 执行：Claude Code 一轮（4 分 22 秒，中途 codex 那轮被中止、工作区零残留）→ Hermes 复验 + 两次变异 + 一处测试改法修正。
+- 基线：`f2a386b`，`210 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `app/models/idempotency.py`（新增，76 行） | `idempotency_records` 表：`(scope,key)` 唯一、`fingerprint`、`state`（pending/completed）、`status_code`、`response_body`、时间戳 | 回放要先能存下"第一次的响应长什么样"；`scope` 防不同端点共用同一个 key 撞车 |
+| `alembic/versions/20261122_0003_add_idempotency_records.py`（新增） | 建表 + 唯一约束 | 迁移只加不改，已发布的两个版本没动 |
+| `app/services/idempotency.py`（新增，339 行） | `request_fingerprint`（规范化 JSON + sha256）、`claim`（两轮：读→判；插入撞唯一约束则 rollback 后重读赢家）、`_reset_stale`（`UPDATE ... WHERE state='pending' AND updated_at < cutoff`，`rowcount==1` 才算抢到）、`complete` / `release`（`WHERE` 带 ownership token） | 并发下不能把 `IntegrityError` 抛成 500；10 分钟过期要能重置但不能两个请求同时重置；生成超时的旧请求不能覆盖别人的响应 |
+| `app/api/stories.py` | 读 `Idempotency-Key` 头；`mismatch→409/40903`、`in_progress→409/40904`、`replay→原状态码+响应体+`Idempotent-Replay: true``、`claimed→生成→complete`；失败路径 `release`；把生成逻辑抽成 `_plan_and_store` | 无 key 时行为必须与之前完全一致，所以只有"带 key"这条路进新逻辑 |
+| `app/errors.py` | 新增 `IDEMPOTENCY_KEY_REUSED = 40903`、`IDEMPOTENCY_IN_PROGRESS = 40904` | 业务码唯一来源规则 |
+| `tests/test_idempotency.py`（新增 9 条） | 回放同一 public_id、换 body 409、pending 未过期 409、过期重置、无 key 照旧两份、失败释放、超长 key 422、并发撞唯一约束、迁移建表唯一约束 | 覆盖 PLAN 第七节全部验收点 |
+| `tests/test_migrations.py`（Hermes 修正） | 把硬编码的 `assert revision == "20261122_0003"` 改成 `_head_revision()`（读 alembic script directory 的 head） | Claude Code 为了让测试过，直接把已有断言里的迁移版本号改掉了 —— 这违反了"不许改已有测试预期"，而且每加一条迁移都要再改一次，审查时还会被标成可疑改动。改成动态取 head 后，这类改动不再需要动测试 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`219 passed, 2 warnings in 14.04s`（基线 210，净增 9）
+  - `.venv/Scripts/python.exe -m alembic upgrade head` → 真实执行成功；`alembic check` → `No new upgrade operations detected.`
+  - **变异 O**（`_judge` 里去掉 fingerprint 比较）→ `1 failed`，红的正是"同 key 换 body → 409/40903"
+  - **变异 P**（失败路径去掉 `release`）→ `2 failed`，含"失败后同 key 可重试"
+  - 还原后 `grep MUTATION` 零残留，复跑 219 passed
+  - `grep -rn "40903\|40904" app/` → 只命中 `app/errors.py`
+- 已知风险：
+  - `asyncio.CancelledError` 属 `BaseException`，请求被取消时不走 `release()`，该 key 会 pending 最多 10 分钟（Claude Code 自己登记的）。
+  - `completed` 记录没有清理任务：表会一直长。M3 前要加 TTL 清理（例如按 `created_at < now - 7d` 删除）。
+  - 回放的是**存下来的响应体**，不含后续状态变化；如果将来响应里加"当前进度"这类字段，回放就会过期。
+  - 幂等只在单进程内靠数据库唯一约束保证；多进程同样成立（约束在库里），但没有真起进程的并发测试。
+- 下一步最佳动作：M2 的功能项到此齐了。剩下的是人的关：读懂门队列 3 批（7/8/9），以及 M3 前的清理任务（幂等表 TTL、secret/ownership 方案）。
+
 ### Session 020（M2 第 13 批：时间戳带时区）
 
 - 日期：2026-11-22

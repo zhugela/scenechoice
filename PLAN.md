@@ -1,47 +1,79 @@
-# PLAN — M2 第 13 批：时间戳带时区（naive → aware UTC）
+# PLAN — M2 第 14 批：POST 幂等键（方案 A）
 
-> 来源：`docs/harness/reviews/latest.md` P3「时间戳以无时区形式返回」。
-> 基线：`e6160e2`，`207 passed`。
-> 本批对外**只改一个东西**：响应里时间戳带上 UTC 偏移；不改任何字段名、状态码、业务码。
+> 负责人 2026-11-22 选 A：接受 `Idempotency-Key` 头，存表，重复请求回放首次响应。
+> 目的不是"接口好看"，是**别把同一次生成重复扣两次 token、留两份存档**。
+> 基线：`f2a386b`，`210 passed`。
 
 ## 一、现状事实
 
 | 事实 | 证据 |
 |---|---|
-| 写入是 aware UTC | `app/models/base.py:32-39` `utcnow()` 返回 `datetime.now(timezone.utc)`，docstring 已写明「SQLite 读回 naive，读者按 UTC 解释」 |
-| 响应直接吐 naive | `app/api/stories.py` 的 `_summary()` 把 `story.created_at` 原样塞进 `StorySummary`；状态端点的 `occurred_at` 同理 |
-| 无任何测试断言过时间戳的时区 | `grep -rn "created_at\|occurred_at" tests/*.py` 只命中 `tests/test_migrations.py` 里的 isoformat 字符串 |
+| `POST /api/stories` 每次都会真调一次模型并新建一份存档 | `app/api/stories.py:76-100`；`progress.md` Session 009 已记录「POST 是生成接口，超时重试会留两份存档」 |
+| 没有任何幂等机制 | `grep -rn "Idempotency" app/` 零命中 |
+| 迁移最新版本 | `alembic/versions/20261116_0002_add_ending_position.py`；本批要加第三个迁移 |
 
-客户端拿到 `2026-11-20T02:39:52` 这种没有 `Z`/`+00:00` 的串，会按**本地时区**解析，非 UTC 机器上就偏 8 小时。
+## 二、数据模型（新增一张表）
 
-## 二、本批做什么
+`app/models/idempotency.py` → `IdempotencyRecord`，表名 `idempotency_records`：
 
-### U1 统一的「读回即 UTC」转换
+| 列 | 类型 | 约束 | 用途 |
+|---|---|---|---|
+| `id` | Integer PK | | 内部主键 |
+| `scope` | String(64) | 非空 | 哪个端点用的 key（`stories.create`），避免不同端点共用同一个 key 撞车 |
+| `key` | String(120) | 非空 | 客户端传来的 `Idempotency-Key` |
+| `fingerprint` | String(64) | 非空 | 请求体的 sha256，用来识别「同一个 key 换了内容」 |
+| `state` | String(20) | CHECK in (`pending`,`completed`) | 进行中 / 已完成 |
+| `status_code` | SmallInteger | 可空 | 完成时记下的原始状态码 |
+| `response_body` | JSON | 可空 | 完成时记下的原始响应体，用于回放 |
+| `created_at` / `updated_at` | DateTime | 非空 | `updated_at` 用于判「卡住的 pending 是否过期」 |
 
-- `app/models/base.py` 增加 `as_utc(value: datetime | None) -> datetime | None`：
-  naive → 视作 UTC 补上 `tzinfo`；已 aware → 转成 UTC；`None` → `None`。
-  docstring 写清它和 `utcnow()` 是同一件事的两端：「写的时候用 UTC，读的时候补回 UTC」。
-- `app/api/stories.py`（以及任何吐时间戳的地方）改为经 `as_utc()` 输出：
-  `StorySummary.created_at/updated_at`、`StoryStateChangeData.occurred_at`。
+唯一约束：`(scope, key)`。迁移文件 `alembic/versions/<日期>_0003_add_idempotency_records.py`。
 
-### U2 测试（3 条，只追加）
+## 三、服务层 `app/services/idempotency.py`
 
-1. `POST /api/stories` → `GET /api/stories` → 列表里 `created_at` / `updated_at` 都是带偏移的 ISO 串（断言以 `+00:00` 结尾，或解析后 `tzinfo is not None`）。
-2. 同一个故事 `GET /api/stories/{id}/state` → `recent_state_changes[0].occurred_at` 同样带时区。
-3. 单元测试 `as_utc()`：naive 补 UTC、aware 转 UTC、`None` 原样返回。
+- `request_fingerprint(payload: dict) -> str`：`json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` 的 sha256。**必须规范化**，否则键顺序不同就误判成"换了内容"。
+- `claim(session, *, scope: str, key: str, fingerprint: str, now=None) -> Claim`：
+  - 无记录 → 插入 `state=pending`，返回 `Claim(outcome="claimed", record=...)`
+  - 有记录且 `fingerprint` 不同 → `outcome="mismatch"`
+  - 有记录、`completed` → `outcome="replay"`，带上 `status_code` / `response_body`
+  - 有记录、`pending` 且 `updated_at` 在 **10 分钟**内 → `outcome="in_progress"`
+  - 有记录、`pending` 且已超过 10 分钟（上次跑崩了）→ 覆盖成新的 `pending`（重置 fingerprint/时间），`outcome="claimed"`
+  - 并发撞唯一约束（`IntegrityError`）→ 回滚该次插入后按上面规则重新读一次再判
+- `complete(session, record, *, status_code: int, body: dict) -> None`：写 `completed` + 状态码 + 响应体
+- `release(session, record) -> None`：删除记录（生成失败时用，让客户端能重试）
 
-### U3 文档
+## 四、路由接线（`app/api/stories.py` 的 `create_story`）
 
-`docs/RELIABILITY.md` 或 `docs/ARCHITECTURE.md` 里补一句「API 时间戳一律 UTC，带偏移输出」——放哪你判断，只要有一处写下来。
+1. 读 `Idempotency-Key` 头（可选，`strip()` 后为空视为没传；长度 >120 → 422，沿用 FastAPI 的校验错误风格或显式 AppError，你定但要写测试）。
+2. 没传 → 完全走现有逻辑，行为零变化。
+3. 传了 →
+   - `mismatch` → `409` + `40903`（同一个 key 换了请求内容）
+   - `in_progress` → `409` + `40904`（同一个请求还在处理）
+   - `replay` → 直接返回存下来的 `status_code` + `response_body`，并加响应头 `Idempotent-Replay: true`
+   - `claimed` → 继续生成；成功后 `complete()` 再返回；**失败路径必须 `release()`**（否则这个 key 会被卡 10 分钟）
+4. `app/errors.py` 增加 `IDEMPOTENCY_KEY_REUSED = 40903`、`IDEMPOTENCY_IN_PROGRESS = 40904`，路由不许再写字面量。
 
-## 三、禁改清单
+## 五、测试（≥6 条，只追加）
 
-- 任何字段名、状态码、业务码、message
-- `app/schemas/story_blueprint.py`、`app/services/*`、`app/models/` 下除 `base.py` 以外的文件、`alembic/*`、`requirements.txt`
+1. 同一个 key 连续两次 → 两次返回同一个 `public_id`，库里只有 **1** 份故事；第二次带 `Idempotent-Replay: true`。
+2. 同一个 key + 不同 `inspiration` → `409` + `40903`，且第二次没有新建故事。
+3. 手工塞一条 `pending` 且 `updated_at` 在 1 分钟内的记录 → `409` + `40904`。
+4. 手工塞一条 `pending` 且 `updated_at` 在 20 分钟前的记录 → 允许重新生成（200/201），并且记录被重置。
+5. 不传 key 连续两次 → 两份不同 `public_id` 的故事（证明旧行为没变）。
+6. 生成失败（planner 抛错）时记录被释放：失败后同一个 key 再请求能成功。
+7. 迁移测试：`alembic upgrade head` 后 `idempotency_records` 表存在且 `(scope, key)` 唯一。
+
+## 六、禁改清单
+
 - 任何已有测试的预期结果
+- `app/schemas/story_blueprint.py`、`app/services/{blueprint_validator,conditions,play_engine,story_planner}.py`
+- 已发布的迁移 `20261115_0001` / `20261116_0002`（只许新增第三个）
+- 现有端点的状态码、业务码、message 语义（除了本批新增的两个码）
+- `requirements.txt`
 
-## 四、验收标准
+## 七、验收标准
 
-1. `pytest -q` ≥ 210，已有用例零改动。
-2. 变异测试：把 `as_utc()` 改成直接 `return value`（不补 tz）→ 用例 1、2 变红。
-3. 手工证据：真实响应里时间戳形如 `2026-11-20T09:12:33.123456+00:00`。
+1. `pytest -q` ≥ 217；已有用例零改动。
+2. 变异测试两条：把 `claim()` 里 `fingerprint` 比较删掉 → 用例 2 变红；把失败路径的 `release()` 删掉 → 用例 6 变红。
+3. `alembic check` → 无差异（模型与迁移一致）。
+4. `grep -rn "40903\|40904" app/` 只命中 `app/errors.py`。
