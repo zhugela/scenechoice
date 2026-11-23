@@ -20,6 +20,8 @@
 | 10 | 实现方说「已验证」，实际没跑 | 自述与证据混同 | 完成判据三层：**文件存在 → 能编译 → 真跑出输出**；变异测试由**验收方**自己做 | 验收报告必须贴真实输出行 |
 | 11 | 功能做完就标 passing，但负责人讲不清 | 状态口径与读懂门脱钩 | **用户可见行为 → `blocked`（等读懂门）**；纯测试/内部收敛/运维设置 → `passing` | `feature_list.json` 的状态与 `docs/learning/read-gate-*.md` 一一对应 |
 | 12 | 同一份知识写两处，改一处漏一处 | 没有单一事实来源 | 业务码/错误映射/版本号/比较逻辑只留一处；用 `grep` 证明收敛 | 各批的 `grep` 验收项 |
+| 13 | 一个 PR 上堆了 3 条重复的 AI 审查评论 | 报告没有身份，每次都 POST 新建 | 同一对象的**状态型汇报必须 upsert**：正文带隐藏 marker，先找旧的 PATCH，没有才 POST；升级前的历史报告用标题前缀认领 | `test_upsert_patches_existing_pr_comment`、`test_upsert_adopts_the_newest_legacy_comment` |
+| 14 | 审查机器人反复说「看不到完整实现」并据此下结论 | 输入被截断却**没告诉模型**，它只能猜 | 输入截断必须在给模型的内容里明写边界（原始 N / 只送入 M / 未送入部分没审） | `test_collect_pr_flags_truncated_diff` |
 
 ## 二、编码代理（Claude Code / Codex）的已知行为
 

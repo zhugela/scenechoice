@@ -1,58 +1,60 @@
-# PLAN — M3 第 1 批修复：旁白缓存键必须是「回合锚点」，不是「请求里的 sequence」
+# PLAN — 工具批：AI 审查评论去重（同一个 PR 只维护一条报告）
 
-> 来源：仓库第 4 棒外部复审（P0-1）+ Hermes 独立复现。
-> Hermes 复现证据（一次性探针，跑完即删）：一次 `advance_story("e1_truth")` 写了 6 行事件，
-> 其中 5 行 `source=player`（seq 2..6）；对每一行各请求一次旁白 →
-> **`narrations` 落 5 行、模型调用 5 次**，5 段不同文本。
-> 「只生成一次」只在两次请求恰好用同一个 sequence 时成立 —— 而前端拿 `recent_changes`
-> 或拿 `outcome.sequence` 都会落在不同行上，所以这不是边缘情况，是主路径。
-> 基线：`6952d2c`，`237 passed`。
+> 来源：负责人转来的分析（PR #12 上 3 条重复的 AI 审查评论）+ Hermes 自己核实：
+> `gh api repos/zhugela/scenechoice/issues/12/comments` 上确实有 3 条 `github-actions[bot]`
+> 评论（2026-11-23T02:19 / 03:16 / 03:38Z），全部是 `scripts/ai_review.py` 用 **POST 新建**的。
+> 基线：`498886a`，`240 passed`。
 
-## 一、根因
+## 一、问题（已核实）
 
-`app/services/narrator.py` 里：
-- `load_context()` 已经把上下文锚定到 `choice_event`（那个回合的 `choice_selected` 行）；
-- 但缓存读写用的是**请求进来的** `sequence`（`_find_cached(..., sequence)` 与 `Narration(sequence=sequence)`）。
+| 事实 | 证据 |
+|---|---|
+| 每次 push 到 PR 分支都会重新审查 | `.github/workflows/ai-review.yml` 的 `pull_request: types: [opened, synchronize, reopened, ready_for_review]` —— **保留**这个触发，不是 bug |
+| 每次都新建评论，越积越多 | `scripts/ai_review.py` 的 `post()` 只有 POST 分支；PR #12 上 3 条评论可查 |
+| diff 过长会被截断，模型还会抱怨"看不到实现" | `MAX_DIFF_CHARS = 60_000`、`MAX_FILE_CHARS = 8_000`、`MAX_CONTEXT_CHARS`，截断时**没有告诉模型，也没有写进报告** |
 
-于是「上下文一样、键不一样」，一个回合被切成 5 段各自缓存。
+## 二、本批做什么（三件）
 
-## 二、要改成什么样
+### U1 一条评论 upsert（主功能）
 
-1. `load_context()` 在 `NarrationContext` 里多返回一个 `turn_sequence`：该回合 `choice_selected` 行的 sequence（即锚点）。
-2. `generate()` 的缓存读取、落库、以及日志一律用 `context.turn_sequence`，**不再用请求参数**。
-3. 端点响应里的 `sequence` 返回 `narration.sequence`，也就是锚点（客户端因此知道同一回合只对应一个值）。
-4. 请求任意一行「属于这个回合的 player 事件」（seq 2..6）都必须命中同一段旁白；
-   请求不属于任何回合的 player 行（如 seq 1 的 `story_status_changed` 且后面没有 choice）→ 仍 404/40402。
+- 新增模块常量：`PR_MARKER = "<!-- ai-review:pr -->"`、`CI_MARKER = "<!-- ai-review:ci -->"`。
+- 新增 `upsert(kind: str, target: str, body: str, marker: str) -> str`：
+  1. 列出目标上已有评论：
+     - `pr` → `gh api --paginate "repos/{slug}/issues/{target}/comments"`
+     - `commit` → `gh api --paginate "repos/{slug}/commits/{target}/comments"`
+  2. 找**正文里含 `marker`** 的第一条：
+     - 找到 → `PATCH repos/{slug}/issues/comments/{id}`（commit 用 `repos/{slug}/comments/{id}`）→ 返回它的 `html_url`
+     - 找不到 → 走现在的 POST
+  3. 只认 marker，不认作者名（fork PR 里 bot 名字可能带前缀）；marker 不同的（PR vs CI 诊断）不许互相覆盖。
+- `main()` 里 PR 模式改用 `upsert(..., PR_MARKER)`；CI 模式改用 `upsert(..., CI_MARKER)`。
+- 正文加一行更新戳：`> 最近更新：<sha 前 7 位> · <UTC ISO 时间>`，让读者一眼知道这是同一份报告的最新版。
 
-## 三、必须新增的测试（这是本批的验收核心）
+### U2 截断要说人话
 
-1. **P0 守门测试**：一次推进后，分别请求 `choice_selected` 行的 sequence 与回合末 `outcome.sequence` →
-   两次都 200、文本相同、响应 `sequence` 相同；`narrations` 表只有 **1** 行；假 client 调用 **1** 次。
-2. **跨回合不串味**：连推两回合，第二回合的旁白 prompt **不含**第一回合的选项文本，
-   且两回合各 1 行（共 2 行）。删掉 `load_context` 里 `next_choice_sequence` 那个上界 → 这条必须变红。
+- `collect_pr()` 组装 context 时，若 diff 长度 > `MAX_DIFF_CHARS`，在 context **顶部**加一行：
+  `⚠ 本次 diff 已截断：原始 N 字符，只送入 M 字符；未送入的部分没有参与审查。`
+- 目的：模型不再凭猜测说"看不到实现"，人也知道这次审查的边界。
 
-## 四、顺带要补的文档与守护（同批，别拖）
+### U3 测试（4 条，`tests/test_ai_review.py` 追加）
 
-- `docs/harness/progress.md` 的 Session 022 已知风险里补：**最坏 90 秒**（3 次尝试 × 30s 客户端超时），
-  并对「GET 有副作用（写库 + 花 token）」与「无鉴权」定级，写清处置计划（改 POST 或加 per-`public_id` 频率上限，二选一，写明选哪个、什么时候做）。
-- 新增一条自动化守护：测试里跑 `python -m alembic check` 子进程，断言输出含
-  `No new upgrade operations detected`。现在只有人手动跑，模型与迁移漂移没人拦。
+| # | 用例 | 断言 |
+|---|---|---|
+| 1 | 已有带 `PR_MARKER` 的旧评论 | 只发 **PATCH**，不发 POST；返回旧评论的 `html_url` |
+| 2 | 没有任何评论 | 发 POST（沿用旧行为） |
+| 3 | 只有带 `CI_MARKER` 的评论，本次是 PR 模式 | 不许覆盖它，走 POST |
+| 4 | 超长 diff | context 含「已截断」；未超长时不含 |
 
-## 五、允许修改
+## 三、禁改清单
 
-- `app/services/narrator.py`、`app/api/narrations.py`、`app/schemas/stories.py`（若响应模型需要说明）
-- `tests/test_narrations.py`（**只允许**因为「响应 sequence 改为回合锚点」这一契约变化而调整断言，且必须在报告里逐条列出改了哪几行、为什么）
-- `docs/harness/progress.md`、新增迁移守护测试文件
+- `.github/workflows/ai-review.yml` 的触发类型（`synchronize` 必须留：最新提交就该被审）
+- `PR_SYSTEM` / `CI_SYSTEM` 提示词
+- 任何已有测试的预期结果
+- `app/` 下所有代码
 
-## 六、禁改清单
+## 四、验收标准
 
-- `app/services/play_engine.py`、`story_planner.py`、`blueprint_validator.py`、`conditions.py`
-- `app/schemas/story_blueprint.py`、`app/models/`、`alembic/`、`requirements.txt`
-- `tests/` 下其它文件（`test_stories_api.py` / `test_play_api.py` / `test_idempotency.py` 一行都不许动）
-
-## 七、验收标准
-
-1. `pytest -q` ≥ 240，且除上面「契约变化」那几行外，没有别的已有断言被改。
-2. 变异 A：把缓存键改回「请求 sequence」→ 新增的 P0 守门测试必须红。
-3. 变异 B：删掉 `next_choice_sequence` 上界 → 跨回合测试必须红。
-4. `python -m alembic check` 子进程守护测试存在且能拦住漂移（人工制造漂移验证一次：临时给模型加一列，守护必须红，然后还原）。
+1. `pytest -q` ≥ 244；已有用例零改动。
+2. 变异 A：删掉 `upsert` 的 PATCH 分支（永远走 POST）→ 用例 1 变红。
+3. 变异 B：marker 判断改成恒 `False` → 用例 1 变红。
+4. 变异 C：去掉截断提示 → 用例 4 变红。
+5. 真实跑一次 `AI_REVIEW_STUB=1 python scripts/ai_review.py pr --number 12 --dry-run` 不报错（不真的发评论）。

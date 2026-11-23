@@ -18,6 +18,31 @@
 
 ## 会话记录
 
+### Session 023（工具批：AI 审查评论去重 + 截断透明）
+
+- 日期：2026-11-23
+- 起因：负责人转来外部分析 + Hermes 核实——PR #12 上有 3 条重复的 `github-actions[bot]` 审查评论（02:19 / 03:16 / 03:38Z），评论里「截断」出现 10 次。
+- 目标：同一个 PR 只维护一条审查评论；截断必须写清楚，别让模型猜。
+- 基线：`498886a`，`240 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `scripts/ai_review.py` | 新增 `PR_MARKER` / `CI_MARKER` / `LEGACY_*_PREFIX` 与 `upsert()`：先列评论 → 带 marker 的 PATCH → 否则按标题前缀认领最新一条遗留报告 → 都没有才 POST；正文加「最近更新：<sha7> · <UTC ISO>」 | 报告没有身份，脚本每次只能新建，于是越堆越多；升级后还要能认领历史那几条，避免多发第 4 条 |
+| `scripts/ai_review.py` | `collect_pr()` 在 diff 超 `MAX_DIFF_CHARS` 时于 context 顶部加一行「⚠ 已截断：原始 N / 只送入 M / 未送入部分没审」 | 模型看不到全文时仍会下结论，这类结论必须打折；写清边界比让它猜要好 |
+| `tests/test_ai_review.py`（+5 条） | 有旧 marker 走 PATCH、无评论走 POST、CI 评论不被 PR 覆盖、遗留报告认领最新一条、超长 diff 有截断提示 | 覆盖 upsert 的四条分支与截断提示 |
+| `.github/workflows/ai-review.yml` | **未改** | `synchronize` 是「新提交就该被审」的正确行为；重复评论是"没更新"的错，不是"不该触发"的错 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`245 passed, 2 warnings in 12.04s`（基线 240，净增 5）
+  - `compileall -q app tests scripts` 通过
+  - `AI_REVIEW_STUB=1 python scripts/ai_review.py pr --number 12 --dry-run` → 输出首行是 `<!-- ai-review:pr -->`，第二行是「最近更新：498886a · 2026-11-23T06:57:58Z」
+  - **四条变异全部变红并还原**：A 删 PATCH 分支 → upsert_patches 红；B marker 判断恒假 → 同一条红；C 去掉截断提示 → truncated_diff 红；D 去掉遗留认领 → legacy_comment 红。终态 245 passed、`grep MUTATION` 零残留
+- 已知风险：
+  - 遗留认领只取**最新一条**：更早的两条历史评论不会被删除，仍会留在 PR 上（要不要删是负责人的决定，属不可逆动作）。
+  - `gh api --paginate` 的输出是"多个 JSON 数组首尾相接"，`_list_comments` 用 `raw_decode` 逐段解；如果 `gh` 以后改了输出格式（比如加行分隔符），这段要跟着改。
+  - 截断只是**告知**，没有提高上下文预算；真正想减少"看不到实现"的误判，下一步应给模型补"被改函数所在文件的完整片段"（现在只给改动文件的整文件，仍受 8000 字符上限约束）。
+- 下一步最佳动作：等这次 push 触发新一轮 AI 审查，确认评论数停在 3 条且最新那条被改写成带 marker 的版本（真实的端到端验证）。
+
 ### Session 022（M3 第 1 批：玩家选择的叙事旁白 narration）
 
 - 日期：2026-11-22

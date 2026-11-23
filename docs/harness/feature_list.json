@@ -326,6 +326,26 @@
         "2026-11-23 修复轮 Hermes 三条变异：A 缓存键改回请求 sequence → P0 守门用例红；B 删 next_choice_sequence 上界 → 跨回合用例红；C 模型加列不写迁移 → test_migration_guard 红；还原后 240 passed"
       ],
       "notes": "【状态修正 2026-11-22】旁白是对外新接口，应挂 blocked 等读懂门（题库：docs/learning/read-gate-m3.md）；P0-1 已修并复验。实现方 Claude Code 曾撞到 --max-turns 50 上限（error_max_turns，$4.00），但代码与验证已完成、Hermes 独立复验通过。遗留：GET 上生成有副作用（已定 P2，计划改 POST + 先加 no-store）；改 prompt/换模型不会重写旧旁白；narrations 无 TTL 清理；旧语义的 narrations 行会变成孤儿（功能未对外，可清空）。"
+    },
+    {
+      "id": "sc-infra-02",
+      "priority": 17,
+      "area": "engineering-infra",
+      "title": "AI 审查评论去重（同一 PR 一条报告）+ 截断透明",
+      "user_visible_behavior": "同一个 PR 上只维护一条 AI 审查评论，新提交是更新它而不是再发一条；报告顶部写明这次审查覆盖到哪（diff 是否被截断）。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests scripts",
+        "AI_REVIEW_STUB=1 .venv/Scripts/python.exe scripts/ai_review.py pr --number 12 --dry-run"
+      ],
+      "evidence": [
+        "2026-11-23 核实：PR #12 上有 3 条重复的 github-actions[bot] 评论（02:19/03:16/03:38Z），评论里「截断」出现 10 次",
+        "2026-11-23 收工 pytest -q → 245 passed, 2 warnings in 12.04s（基线 240，净增 5）",
+        "2026-11-23 四条变异全部变红并还原：删 PATCH 分支 / marker 恒假 / 去掉截断提示 / 去掉遗留认领",
+        "2026-11-23 dry-run 实跑：首行 <!-- ai-review:pr -->，第二行「最近更新：498886a · 2026-11-23T06:57:58Z」"
+      ],
+      "notes": "workflow 的 synchronize 触发保持不变（新提交就该被审）。遗留：更早的两条历史评论不会被自动删除（需负责人决定）。"
     }
   ]
 }

@@ -188,3 +188,148 @@ def test_empty_failure_log_is_skipped(ai_review, monkeypatch, capsys):
 
     with pytest.raises(ai_review.EmptyLog):
         ai_review.collect_ci(123, "abc")
+
+
+def test_upsert_patches_existing_pr_comment(ai_review, monkeypatch):
+    """已有带 PR_MARKER 的旧评论：只 PATCH，不新建；返回旧评论的 html_url。"""
+    existing_url = "https://github.com/zhugela/scenechoice/pull/12#issuecomment-2"
+    commands: list[list[str]] = []
+    patched: dict = {}
+
+    def fake_run(cmd, stdin_text=None):
+        commands.append(cmd)
+        if cmd[:3] == ["gh", "api", "--paginate"]:
+            return json.dumps(
+                [
+                    {"id": 1, "body": "旧 CI 诊断\n" + ai_review.CI_MARKER, "html_url": "https://example.test/ci"},
+                    {"id": 2, "body": "旧审查\n" + ai_review.PR_MARKER, "html_url": existing_url},
+                ]
+            )
+        if cmd[:3] == ["gh", "api", "--method"] and cmd[3] == "PATCH":
+            patched.update(json.loads(Path(cmd[cmd.index("--input") + 1]).read_text(encoding="utf-8")))
+            return json.dumps({"id": 2, "html_url": existing_url})
+        raise AssertionError(f"未预期的命令：{cmd}")
+
+    monkeypatch.setattr(ai_review, "run", fake_run)
+    monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
+
+    url = ai_review.upsert("pr", "12", "最新审查", ai_review.PR_MARKER)
+
+    assert url == existing_url
+    methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
+    assert methods == ["PATCH"], "已有同 marker 的评论时只改不新建"
+    assert "repos/zhugela/scenechoice/issues/comments/2" in commands[-1]
+    assert "最新审查" in patched["body"]
+    assert ai_review.PR_MARKER in patched["body"], "PATCH 后必须保留 marker，下次才能再认出来"
+
+
+def test_upsert_posts_when_no_comments(ai_review, monkeypatch):
+    """目标上一条评论都没有：沿用旧的 POST 行为。"""
+    new_url = "https://github.com/zhugela/scenechoice/pull/12#issuecomment-99"
+    commands: list[list[str]] = []
+    posted: dict = {}
+
+    def fake_run(cmd, stdin_text=None):
+        commands.append(cmd)
+        if cmd[:3] == ["gh", "api", "--paginate"]:
+            return "[]"
+        if cmd[:3] == ["gh", "api", "--method"] and cmd[3] == "POST":
+            posted.update(json.loads(Path(cmd[cmd.index("--input") + 1]).read_text(encoding="utf-8")))
+            return json.dumps({"html_url": new_url})
+        raise AssertionError(f"未预期的命令：{cmd}")
+
+    monkeypatch.setattr(ai_review, "run", fake_run)
+    monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
+
+    assert ai_review.upsert("pr", "12", "最新审查", ai_review.PR_MARKER) == new_url
+    methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
+    assert methods == ["POST"]
+    assert ai_review.PR_MARKER in posted["body"]
+
+
+def test_upsert_does_not_overwrite_ci_comment_in_pr_mode(ai_review, monkeypatch):
+    """只有 CI_MARKER 的评论：PR 报告不能覆盖它，只能新建。"""
+    ci_url = "https://github.com/zhugela/scenechoice/pull/12#issuecomment-3"
+    new_url = "https://github.com/zhugela/scenechoice/pull/12#issuecomment-99"
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, stdin_text=None):
+        commands.append(cmd)
+        if cmd[:3] == ["gh", "api", "--paginate"]:
+            return json.dumps([{"id": 3, "body": "CI 诊断\n" + ai_review.CI_MARKER, "html_url": ci_url}])
+        if cmd[:3] == ["gh", "api", "--method"] and cmd[3] == "POST":
+            return json.dumps({"html_url": new_url})
+        raise AssertionError(f"未预期的命令：{cmd}")
+
+    monkeypatch.setattr(ai_review, "run", fake_run)
+    monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
+
+    assert ai_review.upsert("pr", "12", "最新审查", ai_review.PR_MARKER) == new_url
+    methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
+    assert methods == ["POST"], "CI 的 marker 不是 PR 的，不许覆盖"
+    assert all("comments/3" not in part for cmd in commands for part in cmd)
+
+
+def test_collect_pr_flags_truncated_diff(ai_review, monkeypatch, tmp_path):
+    """diff 被截断时要告诉模型边界，否则它会凭猜测说「看不到实现」。"""
+    monkeypatch.setattr(ai_review, "MAX_DIFF_CHARS", 50)
+    long_diff = tmp_path / "long.diff"
+    long_diff.write_text("+" + "x" * 200 + "\n", encoding="utf-8")
+
+    context = ai_review.collect_pr(0, str(long_diff))
+
+    assert context.startswith("⚠ 本次 diff 已截断")
+    assert "原始 202 字符" in context
+    assert "只送入 50 字符" in context
+
+    short_diff = tmp_path / "short.diff"
+    short_diff.write_text("+x\n", encoding="utf-8")
+    assert "已截断" not in ai_review.collect_pr(0, str(short_diff))
+
+
+def test_upsert_adopts_the_newest_legacy_comment(ai_review, monkeypatch):
+    """升级前发的报告没有 marker：认领最新那条，不许多发一条。
+
+    历史遗留的三条重复评论就是这么产生的：报告没有身份，脚本每次只能新建。
+    修好之后第一次运行应当把它接管成带 marker 的正规报告。
+    """
+    legacy_new = "https://example.test/legacy-new"
+    commands: list[list[str]] = []
+    patched: dict = {}
+
+    def fake_run(cmd, stdin_text=None):
+        commands.append(cmd)
+        if cmd[:3] == ["gh", "api", "--paginate"]:
+            return json.dumps(
+                [
+                    {
+                        "id": 7,
+                        "body": ai_review.LEGACY_PR_PREFIX + "\n\n旧报告一",
+                        "html_url": "https://example.test/legacy-old",
+                        "created_at": "2026-11-23T02:19:51Z",
+                    },
+                    {
+                        "id": 8,
+                        "body": ai_review.LEGACY_PR_PREFIX + "\n\n旧报告二",
+                        "html_url": legacy_new,
+                        "created_at": "2026-11-23T03:38:02Z",
+                    },
+                ]
+            )
+        if cmd[:3] == ["gh", "api", "--method"] and cmd[3] == "PATCH":
+            patched.update(json.loads(Path(cmd[cmd.index("--input") + 1]).read_text(encoding="utf-8")))
+            return json.dumps({"id": 8, "html_url": legacy_new})
+        raise AssertionError(f"未预期的命令：{cmd}")
+
+    monkeypatch.setattr(ai_review, "run", fake_run)
+    monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
+
+    url = ai_review.upsert(
+        "pr", "12", "新报告", ai_review.PR_MARKER, ai_review.LEGACY_PR_PREFIX
+    )
+
+    assert url == legacy_new
+    methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
+    assert methods == ["PATCH"], "有遗留报告时应认领，不许再新建"
+    assert any("issues/comments/8" in part for part in commands[-1]), "要认领最新那条，不是最旧的"
+    assert ai_review.PR_MARKER in patched["body"]
