@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.ending import Ending
     from app.models.episode import Episode
     from app.models.metric import Metric
+    from app.models.narration import Narration
     from app.models.state_change import StoryStateChange
 
 
@@ -112,4 +113,10 @@ class Story(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="StoryStateChange.sequence",
+    )
+    narrations: Mapped[list["Narration"]] = relationship(
+        back_populates="story",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Narration.sequence",
     )

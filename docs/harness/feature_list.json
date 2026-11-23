@@ -302,6 +302,28 @@
         "2026-11-22 Hermes 把 tests/test_migrations.py 的硬编码 head 断言改成动态 _head_revision()（Claude Code 原本直接改了已有断言里的版本号）"
       ],
       "notes": "Claude Code 实现，Hermes 复验。遗留：CancelledError 不走 release（key 会 pending 至多 10 分钟）；completed 记录无 TTL 清理；回放的是存下来的响应体，响应里若加「当前进度」这类字段会过期。"
+    },
+    {
+      "id": "sc-m3-01",
+      "priority": 16,
+      "area": "m3-narration",
+      "title": "玩家选择的叙事旁白（生成一次、缓存回放）",
+      "user_visible_behavior": "对某一次玩家选择请求旁白，得到一段 120～400 字的第二人称叙事；再请求一次返回同一段文本且不再花 token。角色未解锁的秘密不会出现在文本里。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m alembic upgrade head",
+        ".venv/Scripts/python.exe -m alembic check",
+        "grep -rn \"40402|42202\" app/ --include=*.py"
+      ],
+      "evidence": [
+        "2026-11-22 基线 a6010d1 → 220 passed；收工 pytest -q → 237 passed, 2 warnings in 9.84s（净增 17）",
+        "2026-11-22 alembic upgrade head 实跑成功；alembic check → No new upgrade operations detected",
+        "2026-11-22 变异 Q（缓存命中短路）→ 1 failed（回放不调模型用例）；变异 R（validate_narration 恒返回空）→ 6 failed；还原后复跑 237 passed",
+        "2026-11-22 新增 tests/test_narrations.py 17 条，含「prompt 不含 secret」一条",
+        "2026-11-22 grep 40402/42202 只命中 app/errors.py"
+      ],
+      "notes": "Claude Code 撞到 --max-turns 50 上限（error_max_turns，$4.00），但代码与验证已完成，Hermes 独立复验通过。遗留：GET 上生成有副作用；改 prompt/换模型不会重写旧旁白；narrations 无 TTL 清理。"
     }
   ]
 }

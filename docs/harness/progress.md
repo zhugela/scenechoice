@@ -18,6 +18,39 @@
 
 ## 会话记录
 
+### Session 022（M3 第 1 批：玩家选择的叙事旁白 narration）
+
+- 日期：2026-11-22
+- 背景：负责人说「口述稍后补，先继续开发」→ 读懂门记录保留在 `docs/learning/read-gate-m2.md`，未作废；本批起进 M3。
+- 目标：给某一次推进事件生成一段 120～400 字旁白，**同一段只生成一次**（缓存），玩家刷新不重复烧 token。
+- 执行：Claude Code 一轮（8 分 16 秒，撞到 `--max-turns 50` 上限报 `error_max_turns`，$4.00；但代码与验证已完成）→ Hermes 独立复验 + 两次变异。
+- 基线：`a6010d1`，`220 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `app/models/narration.py` + 迁移 `20261123_0004` | `narrations` 表：`(story_id, sequence)` 唯一、`text`、`model`、token 计数、`created_at` | 一条事件只该有一段叙述；唯一约束是并发下的兜底 |
+| `app/prompts/narration.py` | 旁白 system prompt + `build_messages`：第二人称、纯文本、120～400 汉字、**禁系统词**；角色只给名字与角色，**`secret` 永不进 prompt** | 玩家还没解锁的秘密不能借旁白说出来；数字也不是故事 |
+| `app/services/narrator.py`（421 行） | `load_context`（存档/版本/事件三重判）、`generate`（缓存命中直接返回 → 构建 messages → 调用 → 校验 → 落库）、`validate_narration`（围栏/JSON/字数）、修复重试最多 3 次 | 缓存是这批的核心价值；重试把「模型跑偏」变成一次可解释的修复而不是 500 |
+| `app/api/narrations.py` | `GET /api/stories/{public_id}/narrations/{sequence}`：200（生成或回放）/404+40401/404+40402/409+40902/422+42202/上游错误走既有映射 | 对外只暴露一个读接口，没解耦出写接口是因为旁白由推进事件驱动 |
+| `app/errors.py` | `NARRATION_EVENT_NOT_FOUND = 40402`、`NARRATION_REJECTED = 42202` | 业务码唯一来源 |
+| `tests/test_narrations.py`（新增 17 条） | 首次生成并落库、回放不调模型、围栏修复重试、3 次被拒不落库、404×2、409、校验规则参数化、prompt 不含 secret | 覆盖 PLAN 第六节全部 |
+| `tests/test_idempotency.py`（Claude Code 改的） | 迁移测试从 `upgrade head` 改成 `upgrade 20261122_0003` | 该用例断言的是 0003 的 DDL；跟着 head 跑会被后来每条迁移牵连。Hermes 认可这处改动（属于解耦，不是放宽断言） |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`237 passed, 2 warnings in 9.84s`（基线 220，净增 17）
+  - `compileall app tests` 通过；`alembic upgrade head` 实跑成功；`alembic check` → `No new upgrade operations detected`
+  - **变异 Q**（缓存命中路径短路）→ `1 failed`，红的正是 `test_replay_returns_the_same_text_without_calling_the_model_again`
+  - **变异 R**（`validate_narration` 恒返回空列表）→ `6 failed`（围栏修复、3 次被拒、四条校验参数化）
+  - 还原后 `grep MUTATION` 零残留，复跑 237 passed
+  - `grep -rn "40402\|42202" app/` 只命中 `app/errors.py`
+- 已知风险：
+  - 旁白生成是**同步等待**（一次 200～400 字），没有流式，也没有超时预算；上游慢时玩家会干等（超时由 client 的 30s 决定）。
+  - 缓存以 `(story_id, sequence)` 为键：如果将来改 prompt 或换模型，**旧旁白不会自动重写**，需要手动删行或加版本列。
+  - `narrations` 表没有 TTL/清理策略（与 `idempotency_records` 同一类债）。
+  - 生成发生在 GET 上（GET 有副作用：第一次会写库并花 token）。语义上不干净，但对「读一次生成一次」的体验最直接；若将来要被 CDN/浏览器缓存，必须改成 POST 或显式 `Cache-Control: no-store`。
+  - prompt 只给了语义化的指标变化（「声望明显上升」），模型可能编造具体数字——校验目前不查这个。
+- 下一步最佳动作：M3 第 2 片候选——① 把旁白接进推进响应（玩家一步到位看到文本）；② 剧集间过场/结局专属文案；③ 前端（M6）。另外两笔债要先记着：`idempotency_records` 与 `narrations` 都需要 TTL 清理。
+
 ### Session 021（M2 第 14 批：POST 幂等键，方案 A）
 
 - 日期：2026-11-22

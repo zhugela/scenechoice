@@ -1,79 +1,103 @@
-# PLAN — M2 第 14 批：POST 幂等键（方案 A）
+# PLAN — M3 第 1 批：把「玩家的一次选择」变成一段叙事（narration）
 
-> 负责人 2026-11-22 选 A：接受 `Idempotency-Key` 头，存表，重复请求回放首次响应。
-> 目的不是"接口好看"，是**别把同一次生成重复扣两次 token、留两份存档**。
-> 基线：`f2a386b`，`210 passed`。
+> 负责人 2026-11-22 明确：口述稍后补，先继续开发。读懂门记录仍在
+> `docs/learning/read-gate-m2.md`，未作废。
+> M2 功能项已齐（`sc-m2-05/06/07/08/09/10/11/12/13/14`）。本批起进入 M3 第一片。
+> 基线：`a6010d1`，`220 passed`。
 
-## 一、现状事实
+## 一、为什么是这个切片
 
-| 事实 | 证据 |
+M3 的目标是「玩家能读到一个故事」。推进引擎已经能把状态改对（`play_engine`），
+但玩家看到的是数字变化，不是故事。这一批只做**最小可读**：给某一次推进，生成一段
+人话叙述，并且**同一段只生成一次**（缓存），不让玩家每刷新一次就烧一次 token。
+
+不做的事（明确留到后面）：流式输出、多结局文本变体、前端、RAG 记忆、语气定制。
+
+## 二、数据层（新增一张表，迁移 `2026xxxx_0004_add_narrations.py`）
+
+`app/models/narration.py` → `Narration`，表名 `narrations`：
+
+| 列 | 类型 | 约束 |
+|---|---|---|
+| `id` | Integer PK | |
+| `story_id` | FK → `stories.id`，ON DELETE CASCADE | 非空 |
+| `sequence` | Integer | 非空，指 `story_state_changes.sequence`（这次推进的那条事件） |
+| `text` | Text | 非空 |
+| `model` | String(80) | 非空（哪个模型写的） |
+| `prompt_tokens` / `completion_tokens` | Integer | 可空（这次生成花了多少） |
+| `created_at` | DateTime | 非空，UTC |
+
+唯一约束：`(story_id, sequence)` —— 一条事件只应该有一段叙述。
+关系：`Story.narrations`（级联删除）。
+
+## 三、提示词 `app/prompts/narration.py`
+
+- `SYSTEM_PROMPT`：写清「你是互动短剧的旁白」。硬性要求：
+  - 只输出**纯文本**，不要 Markdown、不要 JSON、不要标题、不要引号包裹
+  - 120～400 个汉字（太短没信息量，太长玩家不读）
+  - **第二人称**（「你」）描写玩家刚才的选择带来了什么，落到具体动作/对白/环境，不要复述数字
+  - 不得出现「指标」「数值」「+10」这类游戏系统词
+- `build_messages(context: dict) -> list[dict]`：输入是剧情上下文（见下），输出 messages。
+  上下文包含：故事标题/类型/主题、当前集的目标与冲突、本集人物名单（**只给名字与角色，不给 secret**）、
+  玩家选的那句话、这次选择的后果提示（`consequence_hint`）、指标变化后的**语义描述**
+  （like「声望明显上升」而不是「reputation 62」）。
+- 明确一条：`secret` 永远不进这个 prompt —— 玩家还没解锁的秘密不能借旁白的嘴说出来。
+
+## 四、服务 `app/services/narrator.py`
+
+- `load_context(session, public_id, sequence) -> NarrationContext | None`
+  - 存档不存在 → `None`
+  - 版本不支持 → 抛 `BlueprintVersionError`（复用 `story_store` 的那个，上层映射成 409/40902）
+  - 事件不存在（sequence 超范围 / 不是玩家事件）→ `None`
+- `generate(session, public_id, sequence, *, client, max_attempts=3) -> Narration`
+  - 已有缓存 → 直接返回，**不调模型**
+  - 没缓存 → 构建 messages → 调 `client.complete()` → 校验输出 → 落库（同一事务）
+  - 校验失败（含 Markdown 围栏 / JSON / 字数越界）→ 把失败原因作为修复指令重试，最多 3 次；
+    3 次都不过 → 抛 `NarrationRejected`
+  - `DeepSeekClientError` 原样抛出，由路由层翻译（复用 `provider_errors`）
+- 校验函数 `validate_narration(text) -> list[str]`（返回问题列表，空表示通过）单独可测。
+
+## 五、端点
+
+`GET /api/stories/{public_id}/narrations/{sequence}`
+
+| 情况 | 响应 |
 |---|---|
-| `POST /api/stories` 每次都会真调一次模型并新建一份存档 | `app/api/stories.py:76-100`；`progress.md` Session 009 已记录「POST 是生成接口，超时重试会留两份存档」 |
-| 没有任何幂等机制 | `grep -rn "Idempotency" app/` 零命中 |
-| 迁移最新版本 | `alembic/versions/20261116_0002_add_ending_position.py`；本批要加第三个迁移 |
+| 首次生成 | `200`，`data: {public_id, sequence, text, model}` |
+| 已有缓存 | `200`，同一份文本（不调模型） |
+| 存档不存在 | `404` + `40401` |
+| 版本不支持 | `409` + `40902` |
+| 事件不存在 | `404` + `40402`（新增码：这条事件没有可叙述的内容） |
+| 模型 3 次都被拒 | `422` + `42202`（新增码：旁白不合规，已重试 3 次） |
+| 上游错误 | 走既有 `provider_error_to_app_error` |
 
-## 二、数据模型（新增一张表）
+新增业务码一律进 `app/errors.py`（`NARRATION_EVENT_NOT_FOUND = 40402`、`NARRATION_REJECTED = 42202`），路由里不许写字面量。
 
-`app/models/idempotency.py` → `IdempotencyRecord`，表名 `idempotency_records`：
+## 六、测试（新文件 `tests/test_narrations.py`，全离线，用假 client）
 
-| 列 | 类型 | 约束 | 用途 |
-|---|---|---|---|
-| `id` | Integer PK | | 内部主键 |
-| `scope` | String(64) | 非空 | 哪个端点用的 key（`stories.create`），避免不同端点共用同一个 key 撞车 |
-| `key` | String(120) | 非空 | 客户端传来的 `Idempotency-Key` |
-| `fingerprint` | String(64) | 非空 | 请求体的 sha256，用来识别「同一个 key 换了内容」 |
-| `state` | String(20) | CHECK in (`pending`,`completed`) | 进行中 / 已完成 |
-| `status_code` | SmallInteger | 可空 | 完成时记下的原始状态码 |
-| `response_body` | JSON | 可空 | 完成时记下的原始响应体，用于回放 |
-| `created_at` / `updated_at` | DateTime | 非空 | `updated_at` 用于判「卡住的 pending 是否过期」 |
+1. 首次生成：假 client 返回合法文本 → 落库；`narrations` 表 1 行；响应含 `text`/`model`。
+2. 回放：同参数再请求一次 → 文本相同，且**假 client 的调用次数没有增加**（这是本批的核心断言）。
+3. 模型返回带 ` ``` ` 围栏 → 重试；修好后成功（断言调用次数 = 2）。
+4. 模型 3 次都不合法 → `422` + `42202`，且**没有落库**。
+5. 存档不存在 → `404` + `40401`。
+6. `sequence` 不存在 → `404` + `40402`。
+7. 存档版本被改成 0 → `409` + `40902`。
+8. `validate_narration` 单元测试：Markdown 围栏、JSON、过短、过长、正常文本。
+9. prompt 不含 `secret`：构造一个带 secret 的蓝图，断言 `build_messages` 的文本里没有那个 secret 字符串（防未来顺手把整份蓝图塞进 prompt）。
 
-唯一约束：`(scope, key)`。迁移文件 `alembic/versions/<日期>_0003_add_idempotency_records.py`。
+## 七、禁改清单
 
-## 三、服务层 `app/services/idempotency.py`
-
-- `request_fingerprint(payload: dict) -> str`：`json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` 的 sha256。**必须规范化**，否则键顺序不同就误判成"换了内容"。
-- `claim(session, *, scope: str, key: str, fingerprint: str, now=None) -> Claim`：
-  - 无记录 → 插入 `state=pending`，返回 `Claim(outcome="claimed", record=...)`
-  - 有记录且 `fingerprint` 不同 → `outcome="mismatch"`
-  - 有记录、`completed` → `outcome="replay"`，带上 `status_code` / `response_body`
-  - 有记录、`pending` 且 `updated_at` 在 **10 分钟**内 → `outcome="in_progress"`
-  - 有记录、`pending` 且已超过 10 分钟（上次跑崩了）→ 覆盖成新的 `pending`（重置 fingerprint/时间），`outcome="claimed"`
-  - 并发撞唯一约束（`IntegrityError`）→ 回滚该次插入后按上面规则重新读一次再判
-- `complete(session, record, *, status_code: int, body: dict) -> None`：写 `completed` + 状态码 + 响应体
-- `release(session, record) -> None`：删除记录（生成失败时用，让客户端能重试）
-
-## 四、路由接线（`app/api/stories.py` 的 `create_story`）
-
-1. 读 `Idempotency-Key` 头（可选，`strip()` 后为空视为没传；长度 >120 → 422，沿用 FastAPI 的校验错误风格或显式 AppError，你定但要写测试）。
-2. 没传 → 完全走现有逻辑，行为零变化。
-3. 传了 →
-   - `mismatch` → `409` + `40903`（同一个 key 换了请求内容）
-   - `in_progress` → `409` + `40904`（同一个请求还在处理）
-   - `replay` → 直接返回存下来的 `status_code` + `response_body`，并加响应头 `Idempotent-Replay: true`
-   - `claimed` → 继续生成；成功后 `complete()` 再返回；**失败路径必须 `release()`**（否则这个 key 会被卡 10 分钟）
-4. `app/errors.py` 增加 `IDEMPOTENCY_KEY_REUSED = 40903`、`IDEMPOTENCY_IN_PROGRESS = 40904`，路由不许再写字面量。
-
-## 五、测试（≥6 条，只追加）
-
-1. 同一个 key 连续两次 → 两次返回同一个 `public_id`，库里只有 **1** 份故事；第二次带 `Idempotent-Replay: true`。
-2. 同一个 key + 不同 `inspiration` → `409` + `40903`，且第二次没有新建故事。
-3. 手工塞一条 `pending` 且 `updated_at` 在 1 分钟内的记录 → `409` + `40904`。
-4. 手工塞一条 `pending` 且 `updated_at` 在 20 分钟前的记录 → 允许重新生成（200/201），并且记录被重置。
-5. 不传 key 连续两次 → 两份不同 `public_id` 的故事（证明旧行为没变）。
-6. 生成失败（planner 抛错）时记录被释放：失败后同一个 key 再请求能成功。
-7. 迁移测试：`alembic upgrade head` 后 `idempotency_records` 表存在且 `(scope, key)` 唯一。
-
-## 六、禁改清单
-
-- 任何已有测试的预期结果
-- `app/schemas/story_blueprint.py`、`app/services/{blueprint_validator,conditions,play_engine,story_planner}.py`
-- 已发布的迁移 `20261115_0001` / `20261116_0002`（只许新增第三个）
-- 现有端点的状态码、业务码、message 语义（除了本批新增的两个码）
+- `app/services/play_engine.py`、`app/services/story_planner.py`、`app/services/blueprint_validator.py`、
+  `app/services/conditions.py`、`app/schemas/story_blueprint.py`
+- 已发布迁移（只许新增 0004）
+- 任何已有测试的预期结果（`tests/test_migrations.py` 的 head 断言已是动态的，不需要改）
 - `requirements.txt`
 
-## 七、验收标准
+## 八、验收标准
 
-1. `pytest -q` ≥ 217；已有用例零改动。
-2. 变异测试两条：把 `claim()` 里 `fingerprint` 比较删掉 → 用例 2 变红；把失败路径的 `release()` 删掉 → 用例 6 变红。
-3. `alembic check` → 无差异（模型与迁移一致）。
-4. `grep -rn "40903\|40904" app/` 只命中 `app/errors.py`。
+1. `pytest -q` ≥ 229（9 条新增起），已有用例零改动。
+2. `alembic upgrade head` 实跑成功；`alembic check` 无差异。
+3. 变异测试两条：
+   - 把「已有缓存直接返回」删掉 → 用例 2 变红（证明回放断言不是摆设）
+   - 把 `validate_narration` 改成恒返回空列表 → 用例 3、4 变红
+4. `grep -rn "40402\|42202" app/` 只命中 `app/errors.py`。
