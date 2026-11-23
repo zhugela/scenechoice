@@ -4,6 +4,11 @@ The first request for an event generates and stores the text; every later
 request replays the stored row without calling the provider. This route only
 translates failures and assembles the response — :mod:`app.services.narrator`
 owns the cache, the repair loop, and the transaction.
+
+One play action writes several player-event rows, all narrated by one text.
+The request may use any of their sequences; the response returns the turn
+anchor (the ``choice_selected`` sequence), so clients learn the single value
+that addresses that turn.
 """
 
 from fastapi import APIRouter, Depends
@@ -58,6 +63,8 @@ NARRATION_422_DESCRIPTION = (
 
 class NarrationData(BaseModel):
     public_id: str
+    # The turn anchor (this turn's ``choice_selected`` sequence), not
+    # necessarily the sequence the caller used to ask for the narration.
     sequence: int = Field(ge=1)
     text: str
     model: str

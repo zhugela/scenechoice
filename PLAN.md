@@ -1,103 +1,58 @@
-# PLAN — M3 第 1 批：把「玩家的一次选择」变成一段叙事（narration）
+# PLAN — M3 第 1 批修复：旁白缓存键必须是「回合锚点」，不是「请求里的 sequence」
 
-> 负责人 2026-11-22 明确：口述稍后补，先继续开发。读懂门记录仍在
-> `docs/learning/read-gate-m2.md`，未作废。
-> M2 功能项已齐（`sc-m2-05/06/07/08/09/10/11/12/13/14`）。本批起进入 M3 第一片。
-> 基线：`a6010d1`，`220 passed`。
+> 来源：仓库第 4 棒外部复审（P0-1）+ Hermes 独立复现。
+> Hermes 复现证据（一次性探针，跑完即删）：一次 `advance_story("e1_truth")` 写了 6 行事件，
+> 其中 5 行 `source=player`（seq 2..6）；对每一行各请求一次旁白 →
+> **`narrations` 落 5 行、模型调用 5 次**，5 段不同文本。
+> 「只生成一次」只在两次请求恰好用同一个 sequence 时成立 —— 而前端拿 `recent_changes`
+> 或拿 `outcome.sequence` 都会落在不同行上，所以这不是边缘情况，是主路径。
+> 基线：`6952d2c`，`237 passed`。
 
-## 一、为什么是这个切片
+## 一、根因
 
-M3 的目标是「玩家能读到一个故事」。推进引擎已经能把状态改对（`play_engine`），
-但玩家看到的是数字变化，不是故事。这一批只做**最小可读**：给某一次推进，生成一段
-人话叙述，并且**同一段只生成一次**（缓存），不让玩家每刷新一次就烧一次 token。
+`app/services/narrator.py` 里：
+- `load_context()` 已经把上下文锚定到 `choice_event`（那个回合的 `choice_selected` 行）；
+- 但缓存读写用的是**请求进来的** `sequence`（`_find_cached(..., sequence)` 与 `Narration(sequence=sequence)`）。
 
-不做的事（明确留到后面）：流式输出、多结局文本变体、前端、RAG 记忆、语气定制。
+于是「上下文一样、键不一样」，一个回合被切成 5 段各自缓存。
 
-## 二、数据层（新增一张表，迁移 `2026xxxx_0004_add_narrations.py`）
+## 二、要改成什么样
 
-`app/models/narration.py` → `Narration`，表名 `narrations`：
+1. `load_context()` 在 `NarrationContext` 里多返回一个 `turn_sequence`：该回合 `choice_selected` 行的 sequence（即锚点）。
+2. `generate()` 的缓存读取、落库、以及日志一律用 `context.turn_sequence`，**不再用请求参数**。
+3. 端点响应里的 `sequence` 返回 `narration.sequence`，也就是锚点（客户端因此知道同一回合只对应一个值）。
+4. 请求任意一行「属于这个回合的 player 事件」（seq 2..6）都必须命中同一段旁白；
+   请求不属于任何回合的 player 行（如 seq 1 的 `story_status_changed` 且后面没有 choice）→ 仍 404/40402。
 
-| 列 | 类型 | 约束 |
-|---|---|---|
-| `id` | Integer PK | |
-| `story_id` | FK → `stories.id`，ON DELETE CASCADE | 非空 |
-| `sequence` | Integer | 非空，指 `story_state_changes.sequence`（这次推进的那条事件） |
-| `text` | Text | 非空 |
-| `model` | String(80) | 非空（哪个模型写的） |
-| `prompt_tokens` / `completion_tokens` | Integer | 可空（这次生成花了多少） |
-| `created_at` | DateTime | 非空，UTC |
+## 三、必须新增的测试（这是本批的验收核心）
 
-唯一约束：`(story_id, sequence)` —— 一条事件只应该有一段叙述。
-关系：`Story.narrations`（级联删除）。
+1. **P0 守门测试**：一次推进后，分别请求 `choice_selected` 行的 sequence 与回合末 `outcome.sequence` →
+   两次都 200、文本相同、响应 `sequence` 相同；`narrations` 表只有 **1** 行；假 client 调用 **1** 次。
+2. **跨回合不串味**：连推两回合，第二回合的旁白 prompt **不含**第一回合的选项文本，
+   且两回合各 1 行（共 2 行）。删掉 `load_context` 里 `next_choice_sequence` 那个上界 → 这条必须变红。
 
-## 三、提示词 `app/prompts/narration.py`
+## 四、顺带要补的文档与守护（同批，别拖）
 
-- `SYSTEM_PROMPT`：写清「你是互动短剧的旁白」。硬性要求：
-  - 只输出**纯文本**，不要 Markdown、不要 JSON、不要标题、不要引号包裹
-  - 120～400 个汉字（太短没信息量，太长玩家不读）
-  - **第二人称**（「你」）描写玩家刚才的选择带来了什么，落到具体动作/对白/环境，不要复述数字
-  - 不得出现「指标」「数值」「+10」这类游戏系统词
-- `build_messages(context: dict) -> list[dict]`：输入是剧情上下文（见下），输出 messages。
-  上下文包含：故事标题/类型/主题、当前集的目标与冲突、本集人物名单（**只给名字与角色，不给 secret**）、
-  玩家选的那句话、这次选择的后果提示（`consequence_hint`）、指标变化后的**语义描述**
-  （like「声望明显上升」而不是「reputation 62」）。
-- 明确一条：`secret` 永远不进这个 prompt —— 玩家还没解锁的秘密不能借旁白的嘴说出来。
+- `docs/harness/progress.md` 的 Session 022 已知风险里补：**最坏 90 秒**（3 次尝试 × 30s 客户端超时），
+  并对「GET 有副作用（写库 + 花 token）」与「无鉴权」定级，写清处置计划（改 POST 或加 per-`public_id` 频率上限，二选一，写明选哪个、什么时候做）。
+- 新增一条自动化守护：测试里跑 `python -m alembic check` 子进程，断言输出含
+  `No new upgrade operations detected`。现在只有人手动跑，模型与迁移漂移没人拦。
 
-## 四、服务 `app/services/narrator.py`
+## 五、允许修改
 
-- `load_context(session, public_id, sequence) -> NarrationContext | None`
-  - 存档不存在 → `None`
-  - 版本不支持 → 抛 `BlueprintVersionError`（复用 `story_store` 的那个，上层映射成 409/40902）
-  - 事件不存在（sequence 超范围 / 不是玩家事件）→ `None`
-- `generate(session, public_id, sequence, *, client, max_attempts=3) -> Narration`
-  - 已有缓存 → 直接返回，**不调模型**
-  - 没缓存 → 构建 messages → 调 `client.complete()` → 校验输出 → 落库（同一事务）
-  - 校验失败（含 Markdown 围栏 / JSON / 字数越界）→ 把失败原因作为修复指令重试，最多 3 次；
-    3 次都不过 → 抛 `NarrationRejected`
-  - `DeepSeekClientError` 原样抛出，由路由层翻译（复用 `provider_errors`）
-- 校验函数 `validate_narration(text) -> list[str]`（返回问题列表，空表示通过）单独可测。
+- `app/services/narrator.py`、`app/api/narrations.py`、`app/schemas/stories.py`（若响应模型需要说明）
+- `tests/test_narrations.py`（**只允许**因为「响应 sequence 改为回合锚点」这一契约变化而调整断言，且必须在报告里逐条列出改了哪几行、为什么）
+- `docs/harness/progress.md`、新增迁移守护测试文件
 
-## 五、端点
+## 六、禁改清单
 
-`GET /api/stories/{public_id}/narrations/{sequence}`
+- `app/services/play_engine.py`、`story_planner.py`、`blueprint_validator.py`、`conditions.py`
+- `app/schemas/story_blueprint.py`、`app/models/`、`alembic/`、`requirements.txt`
+- `tests/` 下其它文件（`test_stories_api.py` / `test_play_api.py` / `test_idempotency.py` 一行都不许动）
 
-| 情况 | 响应 |
-|---|---|
-| 首次生成 | `200`，`data: {public_id, sequence, text, model}` |
-| 已有缓存 | `200`，同一份文本（不调模型） |
-| 存档不存在 | `404` + `40401` |
-| 版本不支持 | `409` + `40902` |
-| 事件不存在 | `404` + `40402`（新增码：这条事件没有可叙述的内容） |
-| 模型 3 次都被拒 | `422` + `42202`（新增码：旁白不合规，已重试 3 次） |
-| 上游错误 | 走既有 `provider_error_to_app_error` |
+## 七、验收标准
 
-新增业务码一律进 `app/errors.py`（`NARRATION_EVENT_NOT_FOUND = 40402`、`NARRATION_REJECTED = 42202`），路由里不许写字面量。
-
-## 六、测试（新文件 `tests/test_narrations.py`，全离线，用假 client）
-
-1. 首次生成：假 client 返回合法文本 → 落库；`narrations` 表 1 行；响应含 `text`/`model`。
-2. 回放：同参数再请求一次 → 文本相同，且**假 client 的调用次数没有增加**（这是本批的核心断言）。
-3. 模型返回带 ` ``` ` 围栏 → 重试；修好后成功（断言调用次数 = 2）。
-4. 模型 3 次都不合法 → `422` + `42202`，且**没有落库**。
-5. 存档不存在 → `404` + `40401`。
-6. `sequence` 不存在 → `404` + `40402`。
-7. 存档版本被改成 0 → `409` + `40902`。
-8. `validate_narration` 单元测试：Markdown 围栏、JSON、过短、过长、正常文本。
-9. prompt 不含 `secret`：构造一个带 secret 的蓝图，断言 `build_messages` 的文本里没有那个 secret 字符串（防未来顺手把整份蓝图塞进 prompt）。
-
-## 七、禁改清单
-
-- `app/services/play_engine.py`、`app/services/story_planner.py`、`app/services/blueprint_validator.py`、
-  `app/services/conditions.py`、`app/schemas/story_blueprint.py`
-- 已发布迁移（只许新增 0004）
-- 任何已有测试的预期结果（`tests/test_migrations.py` 的 head 断言已是动态的，不需要改）
-- `requirements.txt`
-
-## 八、验收标准
-
-1. `pytest -q` ≥ 229（9 条新增起），已有用例零改动。
-2. `alembic upgrade head` 实跑成功；`alembic check` 无差异。
-3. 变异测试两条：
-   - 把「已有缓存直接返回」删掉 → 用例 2 变红（证明回放断言不是摆设）
-   - 把 `validate_narration` 改成恒返回空列表 → 用例 3、4 变红
-4. `grep -rn "40402\|42202" app/` 只命中 `app/errors.py`。
+1. `pytest -q` ≥ 240，且除上面「契约变化」那几行外，没有别的已有断言被改。
+2. 变异 A：把缓存键改回「请求 sequence」→ 新增的 P0 守门测试必须红。
+3. 变异 B：删掉 `next_choice_sequence` 上界 → 跨回合测试必须红。
+4. `python -m alembic check` 子进程守护测试存在且能拦住漂移（人工制造漂移验证一次：临时给模型加一列，守护必须红，然后还原）。

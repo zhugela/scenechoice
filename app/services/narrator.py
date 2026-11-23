@@ -11,6 +11,11 @@ The cache is the point of the batch: a replay of an event the archive has
 already narrated must not call the provider at all. The unique
 ``(story_id, sequence)`` constraint backs that up under concurrency — the loser
 of an insert race reads the winner's row instead of failing the request.
+
+One play action writes several player-event rows, so the cache key is the
+*turn anchor* — the sequence of that turn's ``choice_selected`` row — not the
+sequence the caller asked for. Otherwise one turn would be narrated once per
+row: several model calls, several rows, several different texts.
 """
 
 from __future__ import annotations
@@ -93,6 +98,10 @@ class NarrationContext:
 
     # Internal id, needed to address the narration row. Never rendered.
     story_id: int
+    # The cache key and the ``sequence`` we return to the client: the
+    # ``choice_selected`` row of the turn this context describes. Every player
+    # row written by one play action maps onto this single anchor.
+    turn_sequence: int
     title: str
     genre: str
     theme: str
@@ -297,6 +306,7 @@ def load_context(
 
     return NarrationContext(
         story_id=story.id,
+        turn_sequence=choice_event.sequence,
         title=story.title,
         genre=story.genre,
         theme=story.theme,
@@ -342,6 +352,10 @@ async def generate(
 ) -> Narration:
     """Return the cached narration or generate, validate, and store one.
 
+    ``sequence`` only selects the player event; the narration is keyed by the
+    turn anchor in ``context.turn_sequence``, so every row of one play action
+    reads and writes the same cache entry.
+
     Raises :class:`NarrationStoryNotFound`, :class:`NarrationEventNotFound`,
     :class:`BlueprintVersionError`, :class:`NarrationRejected`, or whatever the
     client raises. A rejected generation writes nothing.
@@ -355,7 +369,7 @@ async def generate(
     # Must stay ahead of the model call: a replay is the whole point of the
     # cache. ``load_context`` still ran so a missing story, a missing event, or
     # an unsupported archive version still surfaces with its own error.
-    cached = _find_cached(session, context.story_id, sequence)
+    cached = _find_cached(session, context.story_id, context.turn_sequence)
     if cached is not None:
         return cached
 
@@ -372,7 +386,7 @@ async def generate(
 
         narration = Narration(
             story_id=context.story_id,
-            sequence=sequence,
+            sequence=context.turn_sequence,
             text=reply.content.strip(),
             model=reply.model,
             prompt_tokens=reply.prompt_tokens,
@@ -382,11 +396,13 @@ async def generate(
             session.add(narration)
             session.commit()
         except IntegrityError:
-            # Another request stored this event first. Its text is the one the
+            # Another request stored this turn first. Its text is the one the
             # player should see; replaying ours would mean two different
             # narratives for one event.
             session.rollback()
-            existing = _find_cached(session, context.story_id, sequence)
+            existing = _find_cached(
+                session, context.story_id, context.turn_sequence
+            )
             if existing is None:
                 raise
             return existing
@@ -396,7 +412,7 @@ async def generate(
             "attempts=%s prompt_tokens=%s completion_tokens=%s",
             get_request_id(),
             context.story_id,
-            sequence,
+            context.turn_sequence,
             reply.model,
             attempt,
             reply.prompt_tokens,
@@ -409,7 +425,7 @@ async def generate(
         "issue_count=%s issues=%s",
         get_request_id(),
         context.story_id,
-        sequence,
+        context.turn_sequence,
         max_attempts,
         len(issues),
         " | ".join(issues),

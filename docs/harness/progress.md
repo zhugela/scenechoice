@@ -44,12 +44,28 @@
   - 还原后 `grep MUTATION` 零残留，复跑 237 passed
   - `grep -rn "40402\|42202" app/` 只命中 `app/errors.py`
 - 已知风险：
-  - 旁白生成是**同步等待**（一次 200～400 字），没有流式，也没有超时预算；上游慢时玩家会干等（超时由 client 的 30s 决定）。
-  - 缓存以 `(story_id, sequence)` 为键：如果将来改 prompt 或换模型，**旧旁白不会自动重写**，需要手动删行或加版本列。
+  - 旁白生成是**同步等待**（一次 200～400 字），没有流式，也没有整体超时预算。最坏情况 **90 秒**：修复重试最多 3 次 × 客户端 30s 超时，玩家在这 90 秒里没有任何反馈（定级 **P2**）。
+  - **GET 有副作用**（第一次会写库并花 token）。定级 **P2**：违反 GET 的幂等/可缓存语义，浏览器预取、SPA 重放或中间层缓存都可能触发一次真实计费；同一回合已按锚点缓存，影响有界。
+  - 旁白接口**无鉴权**，`public_id` 即能力凭据。定级 **P1**（花费类接口）：拿到链接的人都能读取并以服务端 token 生成旁白。单存档的生成次数受集数上限约束，但存档本身也是匿名可建的，所以不是零风险。
+  - 处置计划（本批只记录，不改接口）：**选「改 POST」**——在 M3 第 2 片「把旁白接进推进响应」时与推进一起提交（显式请求、可加幂等键），最晚在 M6 前端联调前完成。在那之前给 GET 响应加 `Cache-Control: no-store`，避免中间层缓存带副作用的 200。
+  - 缓存以 `(story_id, sequence)` 为键，`sequence` 是**回合锚点**（该回合 `choice_selected` 行），不是请求里的任意行：如果将来改 prompt 或换模型，**旧旁白不会自动重写**，需要手动删行或加版本列。
   - `narrations` 表没有 TTL/清理策略（与 `idempotency_records` 同一类债）。
-  - 生成发生在 GET 上（GET 有副作用：第一次会写库并花 token）。语义上不干净，但对「读一次生成一次」的体验最直接；若将来要被 CDN/浏览器缓存，必须改成 POST 或显式 `Cache-Control: no-store`。
   - prompt 只给了语义化的指标变化（「声望明显上升」），模型可能编造具体数字——校验目前不查这个。
 - 下一步最佳动作：M3 第 2 片候选——① 把旁白接进推进响应（玩家一步到位看到文本）；② 剧集间过场/结局专属文案；③ 前端（M6）。另外两笔债要先记着：`idempotency_records` 与 `narrations` 都需要 TTL 清理。
+
+#### 修复轮（2026-11-23）：缓存键改为回合锚点（P0）
+
+- 触发：仓库第 4 棒外部复审 P0-1 + Hermes 探针复现——一次 `advance_story` 写 5 行 player 事件，逐行请求旁白会落 5 行、调 5 次模型。
+- 根因：`load_context` 已把上下文锚定到该回合的 `choice_selected`，但缓存读写仍用请求里的 `sequence`。
+- 改动：`NarrationContext` 新增 `turn_sequence`；`generate` 的缓存读、落库、日志与响应全部改用锚点；`tests/test_narrations.py` 只调整了「响应 sequence」与「并发赢家行键」两类断言（逐条见交付报告）；新增 `tests/test_migration_guard.py`。
+- 验证（Hermes 实跑，替换实现方自述）：全量 `240 passed, 2 warnings in 11.48s`（基线 237，净增 3）；`compileall -q app tests` 通过；`alembic check` → `No new upgrade operations detected`。
+- 新增守门用例：`test_one_turn_is_narrated_once_for_any_of_its_rows`（请求锚点与回合末行 → 同一文本、同一响应 sequence、1 行、模型 1 次）、`test_second_turn_prompt_does_not_leak_the_first_turn`（两回合 2 行，第二回合 prompt 不含第一回合选项）。
+- **Hermes 自己的探针**（一次性，跑完即删）：5 行 player 事件逐行请求 → `(2,200,3) (3,200,3) (4,200,3) (5,200,3) (6,200,3)`，`NARRATION ROWS=1  MODEL CALLS=1`；修复前同一探针是 5 行 / 5 次。
+- **Hermes 三条变异**（全部变红并还原，终态 240 passed、零残留）：
+  - A 缓存读改回请求 `sequence` → `test_one_turn_is_narrated_once_for_any_of_its_rows` 红
+  - B 删掉 `next_choice_sequence` 上界 → `test_second_turn_prompt_does_not_leak_the_first_turn` 红
+  - C 只给 `Narration` 模型加一列、不写迁移 → `tests/test_migration_guard.py` 红（这就是第 4 棒要的第 5 条守护）
+- 未执行 `git add` / `git commit` / `git push`（Hermes 代提交）。
 
 ### Session 021（M2 第 14 批：POST 幂等键，方案 A）
 

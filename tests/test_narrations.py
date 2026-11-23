@@ -21,7 +21,13 @@ from sqlalchemy.pool import StaticPool
 from app.clients.deepseek import DeepSeekClientError, LlmReply
 from app.dependencies import get_db_session
 from app.main import create_app
-from app.models import Base, Narration, Story
+from app.models import (
+    Base,
+    Narration,
+    StateChangeEventType,
+    Story,
+    StoryStateChange,
+)
 from app.prompts.narration import build_messages
 from app.schemas.story_blueprint import StoryBlueprint
 from app.services import narrator
@@ -122,6 +128,25 @@ def _advance(
         return advance_story(session, public_id, choice).sequence
 
 
+def _choice_sequences(
+    factory: sessionmaker[Session], public_id: str
+) -> list[int]:
+    """The narration anchor of every turn, in play order."""
+    with factory() as session:
+        return list(
+            session.scalars(
+                select(StoryStateChange.sequence)
+                .join(Story, Story.id == StoryStateChange.story_id)
+                .where(
+                    Story.public_id == public_id,
+                    StoryStateChange.event_type
+                    == StateChangeEventType.CHOICE_SELECTED.value,
+                )
+                .order_by(StoryStateChange.sequence)
+            )
+        )
+
+
 def _narration_count(factory: sessionmaker[Session]) -> int:
     with factory() as session:
         return session.scalar(select(func.count()).select_from(Narration)) or 0
@@ -137,15 +162,17 @@ def test_first_read_generates_and_persists_one_narration(
     fake_client: FakeNarrationClient,
 ) -> None:
     public_id = _create_story(session_factory)
-    sequence = _advance(session_factory, public_id)
+    outcome_sequence = _advance(session_factory, public_id)
+    turn_sequence = _choice_sequences(session_factory, public_id)[0]
 
-    response = api_client.get(_url(public_id, sequence))
+    response = api_client.get(_url(public_id, outcome_sequence))
 
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 0
     assert body["data"]["public_id"] == public_id
-    assert body["data"]["sequence"] == sequence
+    # The turn's narration is addressed by its anchor, not by the row asked for.
+    assert body["data"]["sequence"] == turn_sequence
     assert body["data"]["text"] == VALID_NARRATION
     assert body["data"]["model"] == "deepseek-chat"
     assert len(fake_client.calls) == 1
@@ -168,6 +195,83 @@ def test_replay_returns_the_same_text_without_calling_the_model_again(
     assert first.json()["data"]["text"] == second.json()["data"]["text"]
     assert len(fake_client.calls) == 1, "缓存命中不能再调用模型"
     assert _narration_count(session_factory) == 1
+
+
+def test_one_turn_is_narrated_once_for_any_of_its_rows(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+    fake_client: FakeNarrationClient,
+) -> None:
+    """P0 guard: one play action writes several player rows, one narration.
+
+    Before the cache key became the turn anchor, each row generated its own
+    text — five requests meant five rows and five model calls.
+    """
+    public_id = _create_story(session_factory)
+    outcome_sequence = _advance(session_factory, public_id)
+    turn_sequence = _choice_sequences(session_factory, public_id)[0]
+    assert turn_sequence < outcome_sequence, "the turn must write several rows"
+    # Extra outputs would only be consumed by the regression this test guards.
+    fake_client.outputs = [VALID_NARRATION] * 6
+
+    first = api_client.get(_url(public_id, turn_sequence))
+    second = api_client.get(_url(public_id, outcome_sequence))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["data"]["text"] == second.json()["data"]["text"]
+    assert (
+        first.json()["data"]["sequence"]
+        == second.json()["data"]["sequence"]
+        == turn_sequence
+    )
+
+    for sequence in range(2, outcome_sequence + 1):
+        response = api_client.get(_url(public_id, sequence))
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["sequence"] == turn_sequence
+
+    assert len(fake_client.calls) == 1, "一个回合只允许调用一次模型"
+    assert _narration_count(session_factory) == 1
+
+
+def test_second_turn_prompt_does_not_leak_the_first_turn(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+    fake_client: FakeNarrationClient,
+) -> None:
+    fake_client.outputs = [VALID_NARRATION, VALID_NARRATION]
+    data = valid_blueprint_data()
+    data["episodes"][0]["choices"][0]["text"] = "第一回合独有的选项文本"
+    data["episodes"][1]["choices"][1]["text"] = "第二回合独有的选项文本"
+    public_id = _create_story(session_factory, data)
+
+    _advance(session_factory, public_id, "e1_truth")
+    _advance(session_factory, public_id, "e2_traffic")
+    first_turn, second_turn = _choice_sequences(session_factory, public_id)
+
+    second = api_client.get(_url(public_id, second_turn))
+
+    assert second.status_code == 200
+    second_prompt = "\n".join(
+        message["content"] for message in fake_client.calls[0]
+    )
+    assert "第二回合独有的选项文本" in second_prompt
+    assert "第一回合独有的选项文本" not in second_prompt
+
+    # Ask for the first turn only after turn two is archived: the next
+    # choice's upper bound must keep turn two's metric changes out of it.
+    first = api_client.get(_url(public_id, first_turn))
+
+    assert first.status_code == 200
+    first_prompt = "\n".join(
+        message["content"] for message in fake_client.calls[1]
+    )
+    assert "第一回合独有的选项文本" in first_prompt
+    assert "下降" not in first_prompt, "第一回合的旁白不能混入第二回合的变化"
+
+    assert len(fake_client.calls) == 2
+    assert _narration_count(session_factory) == 2
 
 
 def test_fenced_reply_is_repaired_on_the_second_attempt(
@@ -366,7 +470,8 @@ def test_insert_race_returns_the_winner_instead_of_a_500(
 ) -> None:
     """Two first reads can both miss the cache; the loser must read back."""
     public_id = _create_story(session_factory)
-    sequence = _advance(session_factory, public_id)
+    outcome_sequence = _advance(session_factory, public_id)
+    turn_sequence = _choice_sequences(session_factory, public_id)[0]
     with session_factory() as session:
         story_id = session.scalar(
             select(Story.id).where(Story.public_id == public_id)
@@ -374,7 +479,9 @@ def test_insert_race_returns_the_winner_instead_of_a_500(
         session.add(
             Narration(
                 story_id=story_id,
-                sequence=sequence,
+                # The winner is stored under the turn anchor, which is why the
+                # request for ``outcome_sequence`` must still find it.
+                sequence=turn_sequence,
                 text="winner text",
                 model="other-model",
             )
@@ -395,7 +502,7 @@ def test_insert_race_returns_the_winner_instead_of_a_500(
 
     with session_factory() as session:
         result = asyncio.run(
-            narrator.generate(session, public_id, sequence, client=client)
+            narrator.generate(session, public_id, outcome_sequence, client=client)
         )
 
     assert result.text == "winner text"
