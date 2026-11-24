@@ -19,6 +19,11 @@ class AppError(Exception):
 # The story archive does not exist.
 STORY_NOT_FOUND = 40401
 
+# The requested sequence has no narratable player event: it is out of range,
+# belongs to another story, or is a generated/system event (for example the
+# ``story_created`` row written at import).
+NARRATION_EVENT_NOT_FOUND = 40402
+
 # The submitted choice does not belong to the episode being played.
 PLAY_CHOICE_NOT_IN_EPISODE = 40001
 
@@ -54,6 +59,11 @@ STORY_ARCHIVE_CORRUPTED = 50003
 # Used both by the planner path and by storage validation so the client sees one
 # code regardless of which stage rejected the output.
 STORY_PLAN_INVALID = 42201
+
+# The model produced narration text that failed every repair attempt (Markdown
+# code fence, JSON body, or a length outside the 120..400-character window).
+# Nothing was written, so the client may retry the same event later.
+NARRATION_REJECTED = 42202
 
 # The provider is reachable but is not currently able to serve the request
 # (5xx, timeout, rate limit, or no status at all).

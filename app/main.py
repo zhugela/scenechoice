@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
 from app.config import get_settings
+from app.api.narrations import router as narrations_router
 from app.api.play import router as play_router
 from app.api.stories import router as stories_router
 from app.api.story_plans import router as story_plans_router
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
     application.include_router(story_plans_router)
     application.include_router(stories_router)
     application.include_router(play_router)
+    application.include_router(narrations_router)
 
     @application.get("/health", response_model=ApiResponse)
     def health() -> ApiResponse:

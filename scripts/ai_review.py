@@ -31,10 +31,20 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 MAX_DIFF_CHARS = 60_000
 MAX_LOG_CHARS = 40_000
+
+# 隐藏的 HTML 注释：靠它认出「这是我自己上次发的那条」，不靠作者名
+# （fork PR 里 bot 名字可能带前缀）。PR 报告和 CI 诊断各用各的，互不覆盖。
+PR_MARKER = "<!-- ai-review:pr -->"
+CI_MARKER = "<!-- ai-review:ci -->"
+
+# 历史遗留：本批之前的报告没有 marker，靠标题前缀认领，避免修好之后又多发一条。
+LEGACY_PR_PREFIX = "## AI 审查（DeepSeek）"
+LEGACY_CI_PREFIX = "## CI 失败诊断（DeepSeek）"
 
 
 class EmptyLog(RuntimeError):
@@ -150,6 +160,20 @@ def repo_slug() -> str:
     return gh_json(["repo", "view", "--json", "nameWithOwner"])["nameWithOwner"]
 
 
+def update_stamp(sha: str | None) -> str:
+    """评论顶部的更新戳：同一条评论被 PATCH 后，读者能看出这是哪次提交的版本。"""
+    short = (sha or "")[:7] or "本地"
+    updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return f"> 最近更新：{short} · {updated}"
+
+
+def resolve_sha(number: int | None) -> str:
+    """更新戳用哪个提交：PR 用 head sha；本地 --diff-file 试跑没有 PR 号。"""
+    if number:
+        return gh_json(["pr", "view", str(number), "--json", "headRefOid"]).get("headRefOid") or ""
+    return os.environ.get("GITHUB_SHA", "").strip()
+
+
 SOURCE_SUFFIXES = {".py", ".yml", ".yaml", ".toml", ".cfg", ".ini"}
 MAX_FILE_CHARS = 8_000
 MAX_CONTEXT_CHARS = 40_000
@@ -196,7 +220,13 @@ def collect_pr(number: int, diff_file: str | None) -> str:
         files = ", ".join(paths[:40])
         meta = redact(f"标题：{meta_d['title']}\nPR 描述：{meta_d['body'] or '(空)'}\n改动文件：{files}")
         context = changed_file_context(paths)
-    return f"{meta}\n\n```diff\n{clip(redact(diff), MAX_DIFF_CHARS, 'diff')}\n```{context}"
+    notice = ""
+    if len(diff) > MAX_DIFF_CHARS:
+        notice = (
+            f"⚠ 本次 diff 已截断：原始 {len(diff)} 字符，只送入 {MAX_DIFF_CHARS} 字符；"
+            "未送入的部分没有参与审查。\n\n"
+        )
+    return f"{notice}{meta}\n\n```diff\n{clip(redact(diff), MAX_DIFF_CHARS, 'diff')}\n```{context}"
 
 
 def collect_ci(run_id: int, sha: str | None) -> tuple[str, str | None]:
@@ -284,6 +314,77 @@ def post(kind: str, target: str, body: str) -> str:
     return json.loads(out)["html_url"]
 
 
+def _list_comments(kind: str, target: str) -> list[dict]:
+    """列出目标上已有评论。
+
+    `gh api --paginate` 多页时把每页的 JSON 数组直接拼接输出，
+    不能一次 json.loads 读完，要逐段解码。
+    """
+    slug = repo_slug()
+    if kind == "pr":
+        url = f"repos/{slug}/issues/{target}/comments"
+    else:
+        url = f"repos/{slug}/commits/{target}/comments"
+    raw = run(["gh", "api", "--paginate", url]).strip()
+    if not raw:
+        return []
+    decoder = json.JSONDecoder()
+    comments: list[dict] = []
+    index = 0
+    while index < len(raw):
+        value, index = decoder.raw_decode(raw, index)
+        if isinstance(value, list):
+            comments.extend(value)
+        else:
+            comments.append(value)
+        while index < len(raw) and raw[index].isspace():
+            index += 1
+    return comments
+
+
+def upsert(kind: str, target: str, body: str, marker: str, legacy_prefix: str | None = None) -> str:
+    """同一个目标上同一种报告只维护一条评论。
+
+    列表里正文含 marker 的第一条就 PATCH，找不到才 POST；
+    只认 marker 不认作者名，PR 报告与 CI 诊断的 marker 不同，互不覆盖。
+    ``legacy_prefix`` 用来认领本批之前发的、还没有 marker 的报告（取最新一条），
+    这样升级后不会再多出一条重复评论。
+    返回值统一是评论的 html_url。
+    """
+    if marker not in body:
+        body = f"{marker}\n{body}"
+    comments = _list_comments(kind, target)
+    existing = next(
+        (comment for comment in comments if marker in (comment.get("body") or "")),
+        None,
+    )
+    if existing is None and legacy_prefix:
+        legacy = [
+            comment
+            for comment in comments
+            if (comment.get("body") or "").lstrip().startswith(legacy_prefix)
+        ]
+        # 只认领最新的一条：旧的遗留报告已经被它取代，不需要再去改。
+        existing = max(legacy, key=lambda comment: comment.get("created_at") or "", default=None)
+    if existing is None:
+        return post(kind, target, body)
+
+    slug = repo_slug()
+    if kind == "pr":
+        url = f"repos/{slug}/issues/comments/{existing['id']}"
+    else:
+        url = f"repos/{slug}/comments/{existing['id']}"
+    with tempfile.TemporaryDirectory() as tmp:
+        payload = Path(tmp) / "comment.json"
+        payload.write_text(json.dumps({"body": body}), encoding="utf-8")
+        out = run(["gh", "api", "--method", "PATCH", url, "--input", str(payload)])
+    try:
+        patched = json.loads(out)
+    except json.JSONDecodeError:
+        patched = {}
+    return patched.get("html_url") or existing.get("html_url", "")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="mode", required=True)
@@ -312,12 +413,17 @@ def main() -> int:
             parser.error("--diff-file 是本地试跑，必须加 --dry-run（否则会往 issues/0 发评论）")
         context = collect_pr(args.number or 0, args.diff_file)
         header = "## AI 审查（DeepSeek）\n\n"
+        # 先解析提交号：gh 失败时不要先把模型调用（要花钱）跑完才发现。
+        stamp = update_stamp(resolve_sha(args.number))
         review = call_deepseek(PR_SYSTEM, f"这是本次 PR 的全部改动：\n\n{context}")
-        body = header + review + "\n\n---\n> 由 `scripts/ai_review.py` 自动生成，仅供参考，合并前请人工判断。"
+        body = (
+            f"{PR_MARKER}\n{header}{stamp}\n\n{review}\n\n"
+            "---\n> 由 `scripts/ai_review.py` 自动生成，仅供参考，合并前请人工判断。"
+        )
         if args.dry_run:
             print(body)
             return 0
-        print("comment:", post("pr", str(args.number), body))
+        print("comment:", upsert("pr", str(args.number), body, PR_MARKER, LEGACY_PR_PREFIX))
         return 0
 
     try:
@@ -325,17 +431,20 @@ def main() -> int:
     except EmptyLog as exc:
         print(f"skipped: {exc}")
         return 0
+    sha = args.sha or gh_json(["run", "view", str(args.run_id), "--json", "headSha"])["headSha"]
+    stamp = update_stamp(sha)
     diagnosis = call_deepseek(CI_SYSTEM, f"这次 CI 失败了：\n\n{context}")
-    body = f"## CI 失败诊断（DeepSeek）\n\n{diagnosis}\n\n---\n> 由 `scripts/ai_review.py` 自动生成，仅供参考。"
+    body = (
+        f"{CI_MARKER}\n## CI 失败诊断（DeepSeek）\n\n{stamp}\n\n{diagnosis}\n\n"
+        "---\n> 由 `scripts/ai_review.py` 自动生成，仅供参考。"
+    )
     if args.dry_run:
         print(body)
         return 0
     if pr_number:
-        print("comment:", post("pr", pr_number, body))
+        print("comment:", upsert("pr", pr_number, body, CI_MARKER, LEGACY_CI_PREFIX))
     else:
-        slug = repo_slug()
-        sha = args.sha or gh_json(["run", "view", str(args.run_id), "--json", "headSha"])["headSha"]
-        print("comment:", post("commit", sha, body))
+        print("comment:", upsert("commit", sha, body, CI_MARKER, LEGACY_CI_PREFIX))
     return 0
 
 

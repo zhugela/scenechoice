@@ -1,79 +1,60 @@
-# PLAN — M2 第 14 批：POST 幂等键（方案 A）
+# PLAN — 工具批：AI 审查评论去重（同一个 PR 只维护一条报告）
 
-> 负责人 2026-11-22 选 A：接受 `Idempotency-Key` 头，存表，重复请求回放首次响应。
-> 目的不是"接口好看"，是**别把同一次生成重复扣两次 token、留两份存档**。
-> 基线：`f2a386b`，`210 passed`。
+> 来源：负责人转来的分析（PR #12 上 3 条重复的 AI 审查评论）+ Hermes 自己核实：
+> `gh api repos/zhugela/scenechoice/issues/12/comments` 上确实有 3 条 `github-actions[bot]`
+> 评论（2026-11-23T02:19 / 03:16 / 03:38Z），全部是 `scripts/ai_review.py` 用 **POST 新建**的。
+> 基线：`498886a`，`240 passed`。
 
-## 一、现状事实
+## 一、问题（已核实）
 
 | 事实 | 证据 |
 |---|---|
-| `POST /api/stories` 每次都会真调一次模型并新建一份存档 | `app/api/stories.py:76-100`；`progress.md` Session 009 已记录「POST 是生成接口，超时重试会留两份存档」 |
-| 没有任何幂等机制 | `grep -rn "Idempotency" app/` 零命中 |
-| 迁移最新版本 | `alembic/versions/20261116_0002_add_ending_position.py`；本批要加第三个迁移 |
+| 每次 push 到 PR 分支都会重新审查 | `.github/workflows/ai-review.yml` 的 `pull_request: types: [opened, synchronize, reopened, ready_for_review]` —— **保留**这个触发，不是 bug |
+| 每次都新建评论，越积越多 | `scripts/ai_review.py` 的 `post()` 只有 POST 分支；PR #12 上 3 条评论可查 |
+| diff 过长会被截断，模型还会抱怨"看不到实现" | `MAX_DIFF_CHARS = 60_000`、`MAX_FILE_CHARS = 8_000`、`MAX_CONTEXT_CHARS`，截断时**没有告诉模型，也没有写进报告** |
 
-## 二、数据模型（新增一张表）
+## 二、本批做什么（三件）
 
-`app/models/idempotency.py` → `IdempotencyRecord`，表名 `idempotency_records`：
+### U1 一条评论 upsert（主功能）
 
-| 列 | 类型 | 约束 | 用途 |
-|---|---|---|---|
-| `id` | Integer PK | | 内部主键 |
-| `scope` | String(64) | 非空 | 哪个端点用的 key（`stories.create`），避免不同端点共用同一个 key 撞车 |
-| `key` | String(120) | 非空 | 客户端传来的 `Idempotency-Key` |
-| `fingerprint` | String(64) | 非空 | 请求体的 sha256，用来识别「同一个 key 换了内容」 |
-| `state` | String(20) | CHECK in (`pending`,`completed`) | 进行中 / 已完成 |
-| `status_code` | SmallInteger | 可空 | 完成时记下的原始状态码 |
-| `response_body` | JSON | 可空 | 完成时记下的原始响应体，用于回放 |
-| `created_at` / `updated_at` | DateTime | 非空 | `updated_at` 用于判「卡住的 pending 是否过期」 |
+- 新增模块常量：`PR_MARKER = "<!-- ai-review:pr -->"`、`CI_MARKER = "<!-- ai-review:ci -->"`。
+- 新增 `upsert(kind: str, target: str, body: str, marker: str) -> str`：
+  1. 列出目标上已有评论：
+     - `pr` → `gh api --paginate "repos/{slug}/issues/{target}/comments"`
+     - `commit` → `gh api --paginate "repos/{slug}/commits/{target}/comments"`
+  2. 找**正文里含 `marker`** 的第一条：
+     - 找到 → `PATCH repos/{slug}/issues/comments/{id}`（commit 用 `repos/{slug}/comments/{id}`）→ 返回它的 `html_url`
+     - 找不到 → 走现在的 POST
+  3. 只认 marker，不认作者名（fork PR 里 bot 名字可能带前缀）；marker 不同的（PR vs CI 诊断）不许互相覆盖。
+- `main()` 里 PR 模式改用 `upsert(..., PR_MARKER)`；CI 模式改用 `upsert(..., CI_MARKER)`。
+- 正文加一行更新戳：`> 最近更新：<sha 前 7 位> · <UTC ISO 时间>`，让读者一眼知道这是同一份报告的最新版。
 
-唯一约束：`(scope, key)`。迁移文件 `alembic/versions/<日期>_0003_add_idempotency_records.py`。
+### U2 截断要说人话
 
-## 三、服务层 `app/services/idempotency.py`
+- `collect_pr()` 组装 context 时，若 diff 长度 > `MAX_DIFF_CHARS`，在 context **顶部**加一行：
+  `⚠ 本次 diff 已截断：原始 N 字符，只送入 M 字符；未送入的部分没有参与审查。`
+- 目的：模型不再凭猜测说"看不到实现"，人也知道这次审查的边界。
 
-- `request_fingerprint(payload: dict) -> str`：`json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` 的 sha256。**必须规范化**，否则键顺序不同就误判成"换了内容"。
-- `claim(session, *, scope: str, key: str, fingerprint: str, now=None) -> Claim`：
-  - 无记录 → 插入 `state=pending`，返回 `Claim(outcome="claimed", record=...)`
-  - 有记录且 `fingerprint` 不同 → `outcome="mismatch"`
-  - 有记录、`completed` → `outcome="replay"`，带上 `status_code` / `response_body`
-  - 有记录、`pending` 且 `updated_at` 在 **10 分钟**内 → `outcome="in_progress"`
-  - 有记录、`pending` 且已超过 10 分钟（上次跑崩了）→ 覆盖成新的 `pending`（重置 fingerprint/时间），`outcome="claimed"`
-  - 并发撞唯一约束（`IntegrityError`）→ 回滚该次插入后按上面规则重新读一次再判
-- `complete(session, record, *, status_code: int, body: dict) -> None`：写 `completed` + 状态码 + 响应体
-- `release(session, record) -> None`：删除记录（生成失败时用，让客户端能重试）
+### U3 测试（4 条，`tests/test_ai_review.py` 追加）
 
-## 四、路由接线（`app/api/stories.py` 的 `create_story`）
+| # | 用例 | 断言 |
+|---|---|---|
+| 1 | 已有带 `PR_MARKER` 的旧评论 | 只发 **PATCH**，不发 POST；返回旧评论的 `html_url` |
+| 2 | 没有任何评论 | 发 POST（沿用旧行为） |
+| 3 | 只有带 `CI_MARKER` 的评论，本次是 PR 模式 | 不许覆盖它，走 POST |
+| 4 | 超长 diff | context 含「已截断」；未超长时不含 |
 
-1. 读 `Idempotency-Key` 头（可选，`strip()` 后为空视为没传；长度 >120 → 422，沿用 FastAPI 的校验错误风格或显式 AppError，你定但要写测试）。
-2. 没传 → 完全走现有逻辑，行为零变化。
-3. 传了 →
-   - `mismatch` → `409` + `40903`（同一个 key 换了请求内容）
-   - `in_progress` → `409` + `40904`（同一个请求还在处理）
-   - `replay` → 直接返回存下来的 `status_code` + `response_body`，并加响应头 `Idempotent-Replay: true`
-   - `claimed` → 继续生成；成功后 `complete()` 再返回；**失败路径必须 `release()`**（否则这个 key 会被卡 10 分钟）
-4. `app/errors.py` 增加 `IDEMPOTENCY_KEY_REUSED = 40903`、`IDEMPOTENCY_IN_PROGRESS = 40904`，路由不许再写字面量。
+## 三、禁改清单
 
-## 五、测试（≥6 条，只追加）
-
-1. 同一个 key 连续两次 → 两次返回同一个 `public_id`，库里只有 **1** 份故事；第二次带 `Idempotent-Replay: true`。
-2. 同一个 key + 不同 `inspiration` → `409` + `40903`，且第二次没有新建故事。
-3. 手工塞一条 `pending` 且 `updated_at` 在 1 分钟内的记录 → `409` + `40904`。
-4. 手工塞一条 `pending` 且 `updated_at` 在 20 分钟前的记录 → 允许重新生成（200/201），并且记录被重置。
-5. 不传 key 连续两次 → 两份不同 `public_id` 的故事（证明旧行为没变）。
-6. 生成失败（planner 抛错）时记录被释放：失败后同一个 key 再请求能成功。
-7. 迁移测试：`alembic upgrade head` 后 `idempotency_records` 表存在且 `(scope, key)` 唯一。
-
-## 六、禁改清单
-
+- `.github/workflows/ai-review.yml` 的触发类型（`synchronize` 必须留：最新提交就该被审）
+- `PR_SYSTEM` / `CI_SYSTEM` 提示词
 - 任何已有测试的预期结果
-- `app/schemas/story_blueprint.py`、`app/services/{blueprint_validator,conditions,play_engine,story_planner}.py`
-- 已发布的迁移 `20261115_0001` / `20261116_0002`（只许新增第三个）
-- 现有端点的状态码、业务码、message 语义（除了本批新增的两个码）
-- `requirements.txt`
+- `app/` 下所有代码
 
-## 七、验收标准
+## 四、验收标准
 
-1. `pytest -q` ≥ 217；已有用例零改动。
-2. 变异测试两条：把 `claim()` 里 `fingerprint` 比较删掉 → 用例 2 变红；把失败路径的 `release()` 删掉 → 用例 6 变红。
-3. `alembic check` → 无差异（模型与迁移一致）。
-4. `grep -rn "40903\|40904" app/` 只命中 `app/errors.py`。
+1. `pytest -q` ≥ 244；已有用例零改动。
+2. 变异 A：删掉 `upsert` 的 PATCH 分支（永远走 POST）→ 用例 1 变红。
+3. 变异 B：marker 判断改成恒 `False` → 用例 1 变红。
+4. 变异 C：去掉截断提示 → 用例 4 变红。
+5. 真实跑一次 `AI_REVIEW_STUB=1 python scripts/ai_review.py pr --number 12 --dry-run` 不报错（不真的发评论）。

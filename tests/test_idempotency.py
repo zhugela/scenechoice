@@ -383,7 +383,10 @@ def test_migration_creates_idempotency_records_with_unique_scope_and_key(
     database_path = tmp_path / "idempotency.db"
     database_url = f"sqlite:///{database_path.as_posix()}"
 
-    upgraded = _run_alembic(database_url, "upgrade", "head")
+    # Pin the migration under test. Upgrading to "head" made this test assert
+    # that 0003 was the latest revision, so any later migration (0004 adds
+    # narrations) broke it without touching the idempotency DDL it checks.
+    upgraded = _run_alembic(database_url, "upgrade", "20261122_0003")
     assert upgraded.returncode == 0, upgraded.stderr
 
     engine = create_engine(database_url)

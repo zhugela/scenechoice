@@ -122,6 +122,7 @@ from app.models.enums import (
 from app.models.episode import Episode
 from app.models.idempotency import IdempotencyRecord
 from app.models.metric import Metric
+from app.models.narration import Narration
 from app.models.state_change import StoryStateChange
 from app.models.story import Story
 
@@ -135,6 +136,7 @@ __all__ = [
     "EpisodeStatus",
     "IdempotencyRecord",
     "Metric",
+    "Narration",
     "StateChangeEntityType",
     "StateChangeEventType",
     "StateChangeSource",

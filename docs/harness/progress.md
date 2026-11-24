@@ -18,6 +18,80 @@
 
 ## 会话记录
 
+### Session 023（工具批：AI 审查评论去重 + 截断透明）
+
+- 日期：2026-11-23
+- 起因：负责人转来外部分析 + Hermes 核实——PR #12 上有 3 条重复的 `github-actions[bot]` 审查评论（02:19 / 03:16 / 03:38Z），评论里「截断」出现 10 次。
+- 目标：同一个 PR 只维护一条审查评论；截断必须写清楚，别让模型猜。
+- 基线：`498886a`，`240 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `scripts/ai_review.py` | 新增 `PR_MARKER` / `CI_MARKER` / `LEGACY_*_PREFIX` 与 `upsert()`：先列评论 → 带 marker 的 PATCH → 否则按标题前缀认领最新一条遗留报告 → 都没有才 POST；正文加「最近更新：<sha7> · <UTC ISO>」 | 报告没有身份，脚本每次只能新建，于是越堆越多；升级后还要能认领历史那几条，避免多发第 4 条 |
+| `scripts/ai_review.py` | `collect_pr()` 在 diff 超 `MAX_DIFF_CHARS` 时于 context 顶部加一行「⚠ 已截断：原始 N / 只送入 M / 未送入部分没审」 | 模型看不到全文时仍会下结论，这类结论必须打折；写清边界比让它猜要好 |
+| `tests/test_ai_review.py`（+5 条） | 有旧 marker 走 PATCH、无评论走 POST、CI 评论不被 PR 覆盖、遗留报告认领最新一条、超长 diff 有截断提示 | 覆盖 upsert 的四条分支与截断提示 |
+| `.github/workflows/ai-review.yml` | **未改** | `synchronize` 是「新提交就该被审」的正确行为；重复评论是"没更新"的错，不是"不该触发"的错 |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`245 passed, 2 warnings in 12.04s`（基线 240，净增 5）
+  - `compileall -q app tests scripts` 通过
+  - `AI_REVIEW_STUB=1 python scripts/ai_review.py pr --number 12 --dry-run` → 输出首行是 `<!-- ai-review:pr -->`，第二行是「最近更新：498886a · 2026-11-23T06:57:58Z」
+  - **四条变异全部变红并还原**：A 删 PATCH 分支 → upsert_patches 红；B marker 判断恒假 → 同一条红；C 去掉截断提示 → truncated_diff 红；D 去掉遗留认领 → legacy_comment 红。终态 245 passed、`grep MUTATION` 零残留
+- 已知风险：
+  - 遗留认领只取**最新一条**：更早的两条历史评论不会被删除，仍会留在 PR 上（要不要删是负责人的决定，属不可逆动作）。
+  - `gh api --paginate` 的输出是"多个 JSON 数组首尾相接"，`_list_comments` 用 `raw_decode` 逐段解；如果 `gh` 以后改了输出格式（比如加行分隔符），这段要跟着改。
+  - 截断只是**告知**，没有提高上下文预算；真正想减少"看不到实现"的误判，下一步应给模型补"被改函数所在文件的完整片段"（现在只给改动文件的整文件，仍受 8000 字符上限约束）。
+- 下一步最佳动作：等这次 push 触发新一轮 AI 审查，确认评论数停在 3 条且最新那条被改写成带 marker 的版本（真实的端到端验证）。
+
+### Session 022（M3 第 1 批：玩家选择的叙事旁白 narration）
+
+- 日期：2026-11-22
+- 背景：负责人说「口述稍后补，先继续开发」→ 读懂门记录保留在 `docs/learning/read-gate-m2.md`，未作废；本批起进 M3。
+- 目标：给某一次推进事件生成一段 120～400 字旁白，**同一段只生成一次**（缓存），玩家刷新不重复烧 token。
+- 执行：Claude Code 一轮（8 分 16 秒，撞到 `--max-turns 50` 上限报 `error_max_turns`，$4.00；但代码与验证已完成）→ Hermes 独立复验 + 两次变异。
+- 基线：`a6010d1`，`220 passed`。
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `app/models/narration.py` + 迁移 `20261123_0004` | `narrations` 表：`(story_id, sequence)` 唯一、`text`、`model`、token 计数、`created_at` | 一条事件只该有一段叙述；唯一约束是并发下的兜底 |
+| `app/prompts/narration.py` | 旁白 system prompt + `build_messages`：第二人称、纯文本、120～400 汉字、**禁系统词**；角色只给名字与角色，**`secret` 永不进 prompt** | 玩家还没解锁的秘密不能借旁白说出来；数字也不是故事 |
+| `app/services/narrator.py`（421 行） | `load_context`（存档/版本/事件三重判）、`generate`（缓存命中直接返回 → 构建 messages → 调用 → 校验 → 落库）、`validate_narration`（围栏/JSON/字数）、修复重试最多 3 次 | 缓存是这批的核心价值；重试把「模型跑偏」变成一次可解释的修复而不是 500 |
+| `app/api/narrations.py` | `GET /api/stories/{public_id}/narrations/{sequence}`：200（生成或回放）/404+40401/404+40402/409+40902/422+42202/上游错误走既有映射 | 对外只暴露一个读接口，没解耦出写接口是因为旁白由推进事件驱动 |
+| `app/errors.py` | `NARRATION_EVENT_NOT_FOUND = 40402`、`NARRATION_REJECTED = 42202` | 业务码唯一来源 |
+| `tests/test_narrations.py`（新增 17 条） | 首次生成并落库、回放不调模型、围栏修复重试、3 次被拒不落库、404×2、409、校验规则参数化、prompt 不含 secret | 覆盖 PLAN 第六节全部 |
+| `tests/test_idempotency.py`（Claude Code 改的） | 迁移测试从 `upgrade head` 改成 `upgrade 20261122_0003` | 该用例断言的是 0003 的 DDL；跟着 head 跑会被后来每条迁移牵连。Hermes 认可这处改动（属于解耦，不是放宽断言） |
+
+- 验证证据（Hermes 实跑）：
+  - 全量：`237 passed, 2 warnings in 9.84s`（基线 220，净增 17）
+  - `compileall app tests` 通过；`alembic upgrade head` 实跑成功；`alembic check` → `No new upgrade operations detected`
+  - **变异 Q**（缓存命中路径短路）→ `1 failed`，红的正是 `test_replay_returns_the_same_text_without_calling_the_model_again`
+  - **变异 R**（`validate_narration` 恒返回空列表）→ `6 failed`（围栏修复、3 次被拒、四条校验参数化）
+  - 还原后 `grep MUTATION` 零残留，复跑 237 passed
+  - `grep -rn "40402\|42202" app/` 只命中 `app/errors.py`
+- 已知风险：
+  - 旁白生成是**同步等待**（一次 200～400 字），没有流式，也没有整体超时预算。最坏情况 **90 秒**：修复重试最多 3 次 × 客户端 30s 超时，玩家在这 90 秒里没有任何反馈（定级 **P2**）。
+  - **GET 有副作用**（第一次会写库并花 token）。定级 **P2**：违反 GET 的幂等/可缓存语义，浏览器预取、SPA 重放或中间层缓存都可能触发一次真实计费；同一回合已按锚点缓存，影响有界。
+  - 旁白接口**无鉴权**，`public_id` 即能力凭据。定级 **P1**（花费类接口）：拿到链接的人都能读取并以服务端 token 生成旁白。单存档的生成次数受集数上限约束，但存档本身也是匿名可建的，所以不是零风险。
+  - 处置计划（本批只记录，不改接口）：**选「改 POST」**——在 M3 第 2 片「把旁白接进推进响应」时与推进一起提交（显式请求、可加幂等键），最晚在 M6 前端联调前完成。在那之前给 GET 响应加 `Cache-Control: no-store`，避免中间层缓存带副作用的 200。
+  - 缓存以 `(story_id, sequence)` 为键，`sequence` 是**回合锚点**（该回合 `choice_selected` 行），不是请求里的任意行：如果将来改 prompt 或换模型，**旧旁白不会自动重写**，需要手动删行或加版本列。
+  - `narrations` 表没有 TTL/清理策略（与 `idempotency_records` 同一类债）。
+  - prompt 只给了语义化的指标变化（「声望明显上升」），模型可能编造具体数字——校验目前不查这个。
+- 下一步最佳动作：M3 第 2 片候选——① 把旁白接进推进响应（玩家一步到位看到文本）；② 剧集间过场/结局专属文案；③ 前端（M6）。另外两笔债要先记着：`idempotency_records` 与 `narrations` 都需要 TTL 清理。
+
+#### 修复轮（2026-11-23）：缓存键改为回合锚点（P0）
+
+- 触发：仓库第 4 棒外部复审 P0-1 + Hermes 探针复现——一次 `advance_story` 写 5 行 player 事件，逐行请求旁白会落 5 行、调 5 次模型。
+- 根因：`load_context` 已把上下文锚定到该回合的 `choice_selected`，但缓存读写仍用请求里的 `sequence`。
+- 改动：`NarrationContext` 新增 `turn_sequence`；`generate` 的缓存读、落库、日志与响应全部改用锚点；`tests/test_narrations.py` 只调整了「响应 sequence」与「并发赢家行键」两类断言（逐条见交付报告）；新增 `tests/test_migration_guard.py`。
+- 验证（Hermes 实跑，替换实现方自述）：全量 `240 passed, 2 warnings in 11.48s`（基线 237，净增 3）；`compileall -q app tests` 通过；`alembic check` → `No new upgrade operations detected`。
+- 新增守门用例：`test_one_turn_is_narrated_once_for_any_of_its_rows`（请求锚点与回合末行 → 同一文本、同一响应 sequence、1 行、模型 1 次）、`test_second_turn_prompt_does_not_leak_the_first_turn`（两回合 2 行，第二回合 prompt 不含第一回合选项）。
+- **Hermes 自己的探针**（一次性，跑完即删）：5 行 player 事件逐行请求 → `(2,200,3) (3,200,3) (4,200,3) (5,200,3) (6,200,3)`，`NARRATION ROWS=1  MODEL CALLS=1`；修复前同一探针是 5 行 / 5 次。
+- **Hermes 三条变异**（全部变红并还原，终态 240 passed、零残留）：
+  - A 缓存读改回请求 `sequence` → `test_one_turn_is_narrated_once_for_any_of_its_rows` 红
+  - B 删掉 `next_choice_sequence` 上界 → `test_second_turn_prompt_does_not_leak_the_first_turn` 红
+  - C 只给 `Narration` 模型加一列、不写迁移 → `tests/test_migration_guard.py` 红（这就是第 4 棒要的第 5 条守护）
+- 未执行 `git add` / `git commit` / `git push`（Hermes 代提交）。
+
 ### Session 021（M2 第 14 批：POST 幂等键，方案 A）
 
 - 日期：2026-11-22

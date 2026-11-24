@@ -26,6 +26,7 @@ Before touching code:
 1. Run `./docs/harness/init.sh`. If baseline verification fails, repair the environment first instead of stacking new work.
 2. Read `docs/harness/progress.md` (current verified state, last session, next best action).
 3. Read `docs/harness/feature_list.json` and pick exactly one `not_started` or `in_progress` feature. Never work on two at once.
+4. Read `docs/harness/failure-catalog.md` (失败模式表) and `docs/harness/agent-loop-playbook.md` (R1–R18). Those rules are mandatory: they encode bugs this repo already shipped and then had to fix.
 
 Before ending a session:
 

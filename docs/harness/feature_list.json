@@ -267,7 +267,7 @@
       "area": "m2-contract",
       "title": "对外时间戳统一为带偏移的 UTC",
       "user_visible_behavior": "故事列表的 created_at/updated_at 与状态历史的 occurred_at 都返回带偏移的 ISO 时间戳（`Z` 或 `+00:00`），客户端不再按本地时区误解析。",
-      "status": "passing",
+      "status": "blocked",
       "verification": [
         ".venv/Scripts/python.exe -m pytest -q",
         ".venv/Scripts/python.exe -m compileall -q app tests"
@@ -279,7 +279,7 @@
         "TestClient POST /api/stories → GET /api/stories 实响应：created_at=2026-11-22T03:14:35.077118+00:00",
         "compileall app tests 通过；禁改目录 app/services、story_blueprint.py、models 其余文件、alembic、requirements.txt diff 为空"
       ],
-      "notes": "实现方换成 codex（claude CLI 原生二进制损坏，未修）。Hermes 复验后**删掉了 codex 加的 schema field_serializer**：它为了把 Pydantic 默认的 Z 硬改成 +00:00，让 app/schemas 反向 import app/models，还在序列化里用 assert —— 收益是纯观感，代价是分层倒置。现在 Z 与 +00:00 都算合法，测试断言改为「必须带偏移且偏移为 0」。"
+      "notes": "【状态修正 2026-11-22】外面复审指出：本批改的是对外可见的时间戳契约，属用户可见功能，按 R7 该挂 blocked 等读懂门；之前的 passing 是我按「无新行为」口径误判。}实现方换成 codex（claude CLI 原生二进制损坏，未修）。Hermes 复验后**删掉了 codex 加的 schema field_serializer**：它为了把 Pydantic 默认的 Z 硬改成 +00:00，让 app/schemas 反向 import app/models，还在序列化里用 assert —— 收益是纯观感，代价是分层倒置。现在 Z 与 +00:00 都算合法，测试断言改为「必须带偏移且偏移为 0」。"
     },
     {
       "id": "sc-m2-14",
@@ -287,7 +287,7 @@
       "area": "m2-reliability",
       "title": "POST 幂等键（Idempotency-Key，方案 A）",
       "user_visible_behavior": "同一个 Idempotency-Key 重发时，服务端回放第一次的响应（并带 Idempotent-Replay: true），不会再生成第二份存档、不会再扣一次 token；同一个 key 换了请求内容返回 409/40903，上一次还在处理返回 409/40904。",
-      "status": "passing",
+      "status": "blocked",
       "verification": [
         ".venv/Scripts/python.exe -m pytest -q",
         ".venv/Scripts/python.exe -m alembic upgrade head",
@@ -301,7 +301,51 @@
         "2026-11-22 新增 tests/test_idempotency.py 10 条；迁移 20261122_0003 只加不改",
         "2026-11-22 Hermes 把 tests/test_migrations.py 的硬编码 head 断言改成动态 _head_revision()（Claude Code 原本直接改了已有断言里的版本号）"
       ],
-      "notes": "Claude Code 实现，Hermes 复验。遗留：CancelledError 不走 release（key 会 pending 至多 10 分钟）；completed 记录无 TTL 清理；回放的是存下来的响应体，响应里若加「当前进度」这类字段会过期。"
+      "notes": "【状态修正 2026-11-22】同上：幂等键是对外契约（新错误码 + 新行为），应挂 blocked 等读懂门。}Claude Code 实现，Hermes 复验。遗留：CancelledError 不走 release（key 会 pending 至多 10 分钟）；completed 记录无 TTL 清理；回放的是存下来的响应体，响应里若加「当前进度」这类字段会过期。"
+    },
+    {
+      "id": "sc-m3-01",
+      "priority": 16,
+      "area": "m3-narration",
+      "title": "玩家选择的叙事旁白（生成一次、缓存回放）",
+      "user_visible_behavior": "对某一次玩家选择请求旁白，得到一段 120～400 字的第二人称叙事；再请求一次返回同一段文本且不再花 token。角色未解锁的秘密不会出现在文本里。",
+      "status": "blocked",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m alembic upgrade head",
+        ".venv/Scripts/python.exe -m alembic check",
+        "grep -rn \"40402|42202\" app/ --include=*.py"
+      ],
+      "evidence": [
+        "2026-11-22 基线 a6010d1 → 220 passed；收工 pytest -q → 237 passed, 2 warnings in 9.84s（净增 17）",
+        "2026-11-22 alembic upgrade head 实跑成功；alembic check → No new upgrade operations detected",
+        "2026-11-22 变异 Q（缓存命中短路）→ 1 failed（回放不调模型用例）；变异 R（validate_narration 恒返回空）→ 6 failed；还原后复跑 237 passed",
+        "2026-11-22 新增 tests/test_narrations.py 17 条，含「prompt 不含 secret」一条",
+        "2026-11-22 grep 40402/42202 只命中 app/errors.py",
+        "2026-11-23 外部复审 P0 修复：缓存键从「请求 sequence」改为「回合锚点（choice_selected）」；Hermes 探针实测 5 行 player 事件逐行请求 → 1 行缓存 / 1 次模型调用（修复前 5 行 / 5 次）",
+        "2026-11-23 修复轮 Hermes 三条变异：A 缓存键改回请求 sequence → P0 守门用例红；B 删 next_choice_sequence 上界 → 跨回合用例红；C 模型加列不写迁移 → test_migration_guard 红；还原后 240 passed"
+      ],
+      "notes": "【状态修正 2026-11-22】旁白是对外新接口，应挂 blocked 等读懂门（题库：docs/learning/read-gate-m3.md）；P0-1 已修并复验。实现方 Claude Code 曾撞到 --max-turns 50 上限（error_max_turns，$4.00），但代码与验证已完成、Hermes 独立复验通过。遗留：GET 上生成有副作用（已定 P2，计划改 POST + 先加 no-store）；改 prompt/换模型不会重写旧旁白；narrations 无 TTL 清理；旧语义的 narrations 行会变成孤儿（功能未对外，可清空）。"
+    },
+    {
+      "id": "sc-infra-02",
+      "priority": 17,
+      "area": "engineering-infra",
+      "title": "AI 审查评论去重（同一 PR 一条报告）+ 截断透明",
+      "user_visible_behavior": "同一个 PR 上只维护一条 AI 审查评论，新提交是更新它而不是再发一条；报告顶部写明这次审查覆盖到哪（diff 是否被截断）。",
+      "status": "passing",
+      "verification": [
+        ".venv/Scripts/python.exe -m pytest -q",
+        ".venv/Scripts/python.exe -m compileall -q app tests scripts",
+        "AI_REVIEW_STUB=1 .venv/Scripts/python.exe scripts/ai_review.py pr --number 12 --dry-run"
+      ],
+      "evidence": [
+        "2026-11-23 核实：PR #12 上有 3 条重复的 github-actions[bot] 评论（02:19/03:16/03:38Z），评论里「截断」出现 10 次",
+        "2026-11-23 收工 pytest -q → 245 passed, 2 warnings in 12.04s（基线 240，净增 5）",
+        "2026-11-23 四条变异全部变红并还原：删 PATCH 分支 / marker 恒假 / 去掉截断提示 / 去掉遗留认领",
+        "2026-11-23 dry-run 实跑：首行 <!-- ai-review:pr -->，第二行「最近更新：498886a · 2026-11-23T06:57:58Z」"
+      ],
+      "notes": "workflow 的 synchronize 触发保持不变（新提交就该被审）。遗留：更早的两条历史评论不会被自动删除（需负责人决定）。"
     }
   ]
 }
