@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
@@ -349,3 +350,31 @@ def test_upsert_rejects_body_without_marker(ai_review, monkeypatch):
 
     with pytest.raises(ValueError, match="认领标记"):
         ai_review.upsert("pr", "12", "没有标记的正文", ai_review.PR_MARKER)
+
+
+def _calls(node, name: str) -> bool:
+    return any(
+        isinstance(sub, ast.Call)
+        and getattr(sub.func, "id", getattr(sub.func, "attr", None)) == name
+        for sub in ast.walk(node)
+    )
+
+
+def test_upsert_calls_are_not_wrapped_in_try(ai_review):
+    """写评论那一步不许被 try 包住。
+
+    入口检查靠“抛出去”守卫：一旦有人为了“别让审查把 CI 弄红”加上
+    `except Exception: pass`，忘带标记就会退回静默堆评论的老毛病。
+    """
+    tree = ast.parse(Path(ai_review.__file__).read_text(encoding="utf-8"))
+    offenders = [node.lineno for node in ast.walk(tree) if isinstance(node, ast.Try) and _calls(node, "upsert")]
+    assert offenders == [], f"upsert 被 try 包住了，行号：{offenders}"
+
+
+def test_workflow_never_swallows_review_failures(ai_review):
+    """工作流里不许给审查步骤加 continue-on-error。
+
+    加了它，脚本非 0 退出也会显示绿色，等于把“不吞错”的守门关掉。
+    """
+    workflow = Path(ai_review.__file__).resolve().parent.parent / ".github" / "workflows" / "ai-review.yml"
+    assert "continue-on-error" not in workflow.read_text(encoding="utf-8")
