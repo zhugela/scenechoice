@@ -370,6 +370,10 @@ def upsert(kind: str, target: str, body: str, marker: str, legacy_prefix: str | 
     PR 报告与 CI 诊断的 marker 不同，因此互不覆盖。
     返回值统一是这条评论的 html_url。
     """
+    if marker not in body:
+        # 入口检查，不是业务分支：忘带 marker 的后果是“每次多发一条、几天后才被发现”，
+        # 宁可当场炸掉，也不要静默堆评论。
+        raise ValueError(f"body 必须自带认领标记 {marker!r}，否则下次认不出这条报告")
     existing = _find_owned_comment(_list_comments(kind, target), marker, legacy_prefix)
     if existing is None:
         return post(kind, target, body)

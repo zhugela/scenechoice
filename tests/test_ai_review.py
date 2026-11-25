@@ -333,3 +333,19 @@ def test_upsert_adopts_the_newest_legacy_comment(ai_review, monkeypatch):
     assert methods == ["PATCH"], "有遗留报告时应认领，不许再新建"
     assert any("issues/comments/8" in part for part in commands[-1]), "要认领最新那条，不是最旧的"
     assert ai_review.PR_MARKER in patched["body"]
+
+
+def test_upsert_rejects_body_without_marker(ai_review, monkeypatch):
+    """忘带认领标记要当场炸，不许静默再贴一条。
+
+    这是删掉“自动补 marker”之后换来的代价：调用方必须自己带。
+    静默的后果是评论一条条堆起来、几天后才被发现（PR #12 就是这么变成 3 条的）。
+    """
+    def fake_run(cmd, stdin_text=None):
+        raise AssertionError(f"不该发出任何请求：{cmd}")
+
+    monkeypatch.setattr(ai_review, "run", fake_run)
+    monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
+
+    with pytest.raises(ValueError, match="认领标记"):
+        ai_review.upsert("pr", "12", "没有标记的正文", ai_review.PR_MARKER)
