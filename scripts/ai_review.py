@@ -300,18 +300,23 @@ def call_deepseek(system: str, user: str) -> str:
 
 
 
-def post(kind: str, target: str, body: str) -> str:
-    """评论走 --input 传 JSON，绕开 shell 引号转义（正文里有反引号和中文）。"""
-    slug = repo_slug()
-    if kind == "pr":
-        url = f"repos/{slug}/issues/{target}/comments"
-    else:
-        url = f"repos/{slug}/commits/{target}/comments"
+def _comment_urls(kind: str, target: str, comment_id: int | None = None) -> str:
+    """评论地址。GitHub 把 PR 评论挂在 issues 下、commit 评论挂在 commits 下，其余路径一致。"""
+    prefix = "issues" if kind == "pr" else "commits"
+    tail = f"comments/{comment_id}" if comment_id is not None else f"{target}/comments"
+    return f"repos/{repo_slug()}/{prefix}/{tail}"
+
+
+def _write_comment(url: str, body: str, method: str) -> str:
+    """按 --input 传 JSON，绕开 shell 引号转义（正文里有反引号和中文）。"""
     with tempfile.TemporaryDirectory() as tmp:
         payload = Path(tmp) / "comment.json"
         payload.write_text(json.dumps({"body": body}), encoding="utf-8")
-        out = run(["gh", "api", "--method", "POST", url, "--input", str(payload)])
-    return json.loads(out)["html_url"]
+        return run(["gh", "api", "--method", method, url, "--input", str(payload)])
+
+
+def post(kind: str, target: str, body: str) -> str:
+    return json.loads(_write_comment(_comment_urls(kind, target), body, "POST"))["html_url"]
 
 
 def _list_comments(kind: str, target: str) -> list[dict]:
@@ -320,12 +325,7 @@ def _list_comments(kind: str, target: str) -> list[dict]:
     `gh api --paginate` 多页时把每页的 JSON 数组直接拼接输出，
     不能一次 json.loads 读完，要逐段解码。
     """
-    slug = repo_slug()
-    if kind == "pr":
-        url = f"repos/{slug}/issues/{target}/comments"
-    else:
-        url = f"repos/{slug}/commits/{target}/comments"
-    raw = run(["gh", "api", "--paginate", url]).strip()
+    raw = run(["gh", "api", "--paginate", _comment_urls(kind, target)]).strip()
     if not raw:
         return []
     decoder = json.JSONDecoder()
@@ -342,47 +342,40 @@ def _list_comments(kind: str, target: str) -> list[dict]:
     return comments
 
 
-def upsert(kind: str, target: str, body: str, marker: str, legacy_prefix: str | None = None) -> str:
-    """同一个目标上同一种报告只维护一条评论。
+def _find_owned_comment(
+    comments: list[dict], marker: str, legacy_prefix: str | None
+) -> dict | None:
+    """找到「这条报告我上次发的那一份」。
 
-    列表里正文含 marker 的第一条就 PATCH，找不到才 POST；
-    只认 marker 不认作者名，PR 报告与 CI 诊断的 marker 不同，互不覆盖。
-    ``legacy_prefix`` 用来认领本批之前发的、还没有 marker 的报告（取最新一条），
-    这样升级后不会再多出一条重复评论。
-    返回值统一是评论的 html_url。
+    先认 marker（隐藏 HTML 注释，页面上不显示）；找不到再认领**最新一条**遗留报告 ——
+    升级前的报告没有 marker，认领它才不会再多发一条重复评论。
     """
-    if marker not in body:
-        body = f"{marker}\n{body}"
-    comments = _list_comments(kind, target)
-    existing = next(
-        (comment for comment in comments if marker in (comment.get("body") or "")),
-        None,
-    )
-    if existing is None and legacy_prefix:
-        legacy = [
-            comment
-            for comment in comments
-            if (comment.get("body") or "").lstrip().startswith(legacy_prefix)
-        ]
-        # 只认领最新的一条：旧的遗留报告已经被它取代，不需要再去改。
-        existing = max(legacy, key=lambda comment: comment.get("created_at") or "", default=None)
+    for comment in comments:
+        if marker in (comment.get("body") or ""):
+            return comment
+    if not legacy_prefix:
+        return None
+    legacy = [
+        comment
+        for comment in comments
+        if (comment.get("body") or "").lstrip().startswith(legacy_prefix)
+    ]
+    return max(legacy, key=lambda comment: comment.get("created_at") or "", default=None)
+
+
+def upsert(kind: str, target: str, body: str, marker: str, legacy_prefix: str | None = None) -> str:
+    """同一个目标上同一种报告只维护一条评论：已存在就改它，不存在才新建。
+
+    调用方必须在 ``body`` 里自带 ``marker``（隐藏注释），否则下次认不出这条是自己的。
+    PR 报告与 CI 诊断的 marker 不同，因此互不覆盖。
+    返回值统一是这条评论的 html_url。
+    """
+    existing = _find_owned_comment(_list_comments(kind, target), marker, legacy_prefix)
     if existing is None:
         return post(kind, target, body)
-
-    slug = repo_slug()
-    if kind == "pr":
-        url = f"repos/{slug}/issues/comments/{existing['id']}"
-    else:
-        url = f"repos/{slug}/comments/{existing['id']}"
-    with tempfile.TemporaryDirectory() as tmp:
-        payload = Path(tmp) / "comment.json"
-        payload.write_text(json.dumps({"body": body}), encoding="utf-8")
-        out = run(["gh", "api", "--method", "PATCH", url, "--input", str(payload)])
-    try:
-        patched = json.loads(out)
-    except json.JSONDecodeError:
-        patched = {}
-    return patched.get("html_url") or existing.get("html_url", "")
+    # PATCH 改的就是这条评论本身，地址不会变；不必再解析返回体去取 html_url。
+    _write_comment(_comment_urls(kind, target, existing["id"]), body, "PATCH")
+    return existing.get("html_url", "")
 
 
 def main() -> int:

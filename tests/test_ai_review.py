@@ -213,7 +213,7 @@ def test_upsert_patches_existing_pr_comment(ai_review, monkeypatch):
     monkeypatch.setattr(ai_review, "run", fake_run)
     monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
 
-    url = ai_review.upsert("pr", "12", "最新审查", ai_review.PR_MARKER)
+    url = ai_review.upsert("pr", "12", ai_review.PR_MARKER + " 最新审查", ai_review.PR_MARKER)
 
     assert url == existing_url
     methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
@@ -241,7 +241,7 @@ def test_upsert_posts_when_no_comments(ai_review, monkeypatch):
     monkeypatch.setattr(ai_review, "run", fake_run)
     monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
 
-    assert ai_review.upsert("pr", "12", "最新审查", ai_review.PR_MARKER) == new_url
+    assert ai_review.upsert("pr", "12", ai_review.PR_MARKER + " 最新审查", ai_review.PR_MARKER) == new_url
     methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
     assert methods == ["POST"]
     assert ai_review.PR_MARKER in posted["body"]
@@ -264,7 +264,7 @@ def test_upsert_does_not_overwrite_ci_comment_in_pr_mode(ai_review, monkeypatch)
     monkeypatch.setattr(ai_review, "run", fake_run)
     monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
 
-    assert ai_review.upsert("pr", "12", "最新审查", ai_review.PR_MARKER) == new_url
+    assert ai_review.upsert("pr", "12", ai_review.PR_MARKER + " 最新审查", ai_review.PR_MARKER) == new_url
     methods = [cmd[3] for cmd in commands if cmd[:3] == ["gh", "api", "--method"]]
     assert methods == ["POST"], "CI 的 marker 不是 PR 的，不许覆盖"
     assert all("comments/3" not in part for cmd in commands for part in cmd)
@@ -325,7 +325,7 @@ def test_upsert_adopts_the_newest_legacy_comment(ai_review, monkeypatch):
     monkeypatch.setattr(ai_review, "repo_slug", lambda: "zhugela/scenechoice")
 
     url = ai_review.upsert(
-        "pr", "12", "新报告", ai_review.PR_MARKER, ai_review.LEGACY_PR_PREFIX
+        "pr", "12", ai_review.PR_MARKER + " 新报告", ai_review.PR_MARKER, ai_review.LEGACY_PR_PREFIX
     )
 
     assert url == legacy_new
