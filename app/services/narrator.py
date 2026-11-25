@@ -50,7 +50,7 @@ MAX_NARRATION_HANZI = 400
 
 
 class CompletionClient(Protocol):
-    async def complete(self, messages: list[dict[str, str]]) -> LlmReply: ...
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> LlmReply: ...
 
 
 class NarrationStoryNotFound(RuntimeError):
@@ -377,7 +377,7 @@ async def generate(
     messages = base_messages
     issues: list[str] = []
     for attempt in range(1, max_attempts + 1):
-        reply = await client.complete(messages)
+        reply = await client.complete(messages, json_mode=False)
         issues = validate_narration(reply.content)
         if issues:
             if attempt < max_attempts:

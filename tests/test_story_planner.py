@@ -14,7 +14,7 @@ class FakeClient:
         self.outputs = iter(outputs)
         self.calls: list[list[dict[str, str]]] = []
 
-    async def complete(self, messages: list[dict[str, str]]) -> LlmReply:
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> LlmReply:
         self.calls.append(messages)
         output = next(self.outputs)
         if isinstance(output, Exception):

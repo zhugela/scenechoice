@@ -69,19 +69,29 @@ class DeepSeekClient:
         self.max_tokens = max_tokens
         self.transport = transport
 
-    async def complete(self, messages: list[dict[str, str]]) -> LlmReply:
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> LlmReply:
+        """Ask the model for a completion.
+
+        ``json_mode`` maps to the provider's ``response_format`` switch. It must
+        stay a per-call choice: the story planner needs structured JSON, while
+        narration needs prose. Forcing JSON on prose measurably degenerates — the
+        model answers with a whitespace-only body (observed: 176 completion
+        tokens, all spaces) and the narration validator rejects it as "0 汉字".
+        """
+        request_body: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": self.max_tokens,
+        }
+        if json_mode:
+            request_body["response_format"] = {"type": "json_object"}
         try:
             async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "response_format": {"type": "json_object"},
-                        "temperature": 0.7,
-                        "max_tokens": self.max_tokens,
-                    },
+                    json=request_body,
                 )
                 response.raise_for_status()
                 payload: Any = response.json()

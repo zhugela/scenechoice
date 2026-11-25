@@ -15,7 +15,7 @@ from app.services.blueprint_validator import BlueprintValidator
 
 
 class CompletionClient(Protocol):
-    async def complete(self, messages: list[dict[str, str]]) -> LlmReply: ...
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> LlmReply: ...
 
 
 class StoryPlanningError(RuntimeError):

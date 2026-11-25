@@ -39,7 +39,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeClient:
-    async def complete(self, messages: list[dict[str, str]]) -> LlmReply:
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> LlmReply:
         return LlmReply(
             json.dumps(valid_blueprint_data(), ensure_ascii=False),
             "fake-model",

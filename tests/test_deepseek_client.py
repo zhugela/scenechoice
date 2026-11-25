@@ -46,6 +46,32 @@ def test_deepseek_client_parses_content_and_usage() -> None:
     assert make_client(handler).timeout == 1
 
 
+def test_deepseek_client_omits_json_mode_when_asked_for_prose() -> None:
+    """散文请求不许带 response_format。
+
+    真机实测：给旁白（散文）请求带 ``response_format=json_object`` 时，
+    模型返回 176 个 token 的纯空格，校验判「0 个汉字」，接口直接 422。
+    """
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "model": "deepseek-chat",
+                "choices": [{"message": {"content": "旁白正文"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 2},
+            },
+        )
+
+    reply = asyncio.run(
+        make_client(handler).complete([{"role": "user", "content": "hi"}], json_mode=False)
+    )
+    assert "response_format" not in seen
+    assert reply.content == "旁白正文"
+
+
 def test_deepseek_client_does_not_retry_authentication_error() -> None:
     client = make_client(lambda request: httpx.Response(401, text="key leaked"))
     with pytest.raises(DeepSeekClientError, match="DeepSeek request failed") as error:

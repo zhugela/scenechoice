@@ -22,6 +22,7 @@
 | 12 | 同一份知识写两处，改一处漏一处 | 没有单一事实来源 | 业务码/错误映射/版本号/比较逻辑只留一处；用 `grep` 证明收敛 | 各批的 `grep` 验收项 |
 | 13 | 一个 PR 上堆了 3 条重复的 AI 审查评论 | 报告没有身份，每次都 POST 新建 | 同一对象的**状态型汇报必须 upsert**：正文带隐藏 marker，先找旧的 PATCH，没有才 POST；升级前的历史报告用标题前缀认领 | `test_upsert_patches_existing_pr_comment`、`test_upsert_adopts_the_newest_legacy_comment` |
 | 14 | 审查机器人反复说「看不到完整实现」并据此下结论 | 输入被截断却**没告诉模型**，它只能猜 | 输入截断必须在给模型的内容里明写边界（原始 N / 只送入 M / 未送入部分没审） | `test_collect_pr_flags_truncated_diff` |
+| 15 | 假 client 全绿、真模型下旁白永远 422（模型返回 214 个空格） | 客户端把 `response_format=json_object` 写死，散文请求也带上了；模型于是吐空白 | 请求参数要按用途区分（结构化用 JSON 模式、散文不用）；**假 client 测不出请求参数错**，必须有一条断言直接检查请求体，并定期用真模型冒烟 | `test_generation_asks_for_prose_not_json`、`test_deepseek_client_omits_json_mode_when_asked_for_prose`、`test_whitespace_only_reply_is_rejected_and_writes_nothing` |
 
 ## 二、编码代理（Claude Code / Codex）的已知行为
 

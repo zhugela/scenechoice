@@ -18,6 +18,32 @@
 
 ## 会话记录
 
+### Session 024（修真实模型下的旁白 422：JSON 模式被写死）
+
+- 日期：2026-11-23
+- 起因：本地起服务端到端验证时发现 `GET /api/stories/{id}/narrations/{seq}` 在**真模型**下稳定 422/42202，假 client 的 17 条用例全绿。
+- 定位过程：
+  1. 服务端日志：`narration rejected ... issues=旁白过短：只有 0 个汉字，至少需要 120 个`
+  2. 复跑一次模型并打印原始返回：`content` 是 **214 个空格**，`completion_tokens=144`，`finish_reason=stop`
+  3. 同一组消息分别用「带/不带 `response_format=json_object`」各请求一次：
+     - 带 → 261 字符纯空白（176 tokens）
+     - 不带 → 229 字正常中文旁白
+- 根因：`DeepSeekClient.complete()` 把 `response_format={"type":"json_object"}` **写死**在请求体里。故事规划要 JSON，旁白要散文，同一个客户端一套参数，散文请求也被按成了 JSON 模式。
+- 修法：
+  - `app/clients/deepseek.py`：`complete(messages, *, json_mode: bool = True)`，按调用方决定是否带 `response_format`（默认 True 保持故事规划行为不变）
+  - `app/services/narrator.py`：模型调用改 `json_mode=False`；两个 Protocol 同步签名
+  - `tests/`：5 个假 client 接受该关键字参数，**没有放宽任何既有断言**
+  - 新增 3 条：`test_generation_asks_for_prose_not_json`（断言请求走散文模式）、`test_deepseek_client_omits_json_mode_when_asked_for_prose`（断言请求体里没有 response_format）、`test_whitespace_only_reply_is_rejected_and_writes_nothing`（纯空白必须拒收且不落库）
+- 验证证据（Hermes 实跑）：
+  - 全量：`248 → 251 passed`
+  - 变异 I2（旁白改回 JSON 模式）、J2（client 无条件带 response_format）分别打红对应用例，还原后零残留
+  - **真模型端到端**：`GET /api/stories/c323…/narrations/7` → `HTTP 200`、`code=0`、`sequence=3`（回合锚点）、283 字中文
+  - 缓存：同一请求第二次 0.124s 返回同一文本，`narrations` 表仍 1 行
+- 沉淀：failure-catalog #15（假 client 测不出请求参数错；散文/JSON 模式必须按用途区分）
+- 已知风险：
+  - 真模型冒烟目前靠人手动跑；CI 里没有（要花钱，且需要 key）
+  - `deepseek-flash` 在散文模式下偶尔会更长，仍受 120–400 汉字窗口约束，超长会被打回重试
+
 ### Session 023（工具批：AI 审查评论去重 + 截断透明）
 
 - 日期：2026-11-23

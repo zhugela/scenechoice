@@ -53,9 +53,11 @@ class FakeNarrationClient:
     def __init__(self, outputs: list[str | Exception] | None = None) -> None:
         self.outputs = list(outputs) if outputs is not None else [VALID_NARRATION]
         self.calls: list[list[dict[str, str]]] = []
+        self.json_modes: list[bool] = []
 
-    async def complete(self, messages: list[dict[str, str]]) -> LlmReply:
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> LlmReply:
         self.calls.append(messages)
+        self.json_modes.append(json_mode)
         if not self.outputs:
             raise AssertionError("fake narration client has no queued output")
         output = self.outputs.pop(0)
@@ -509,3 +511,39 @@ def test_insert_race_returns_the_winner_instead_of_a_500(
     assert len(client.calls) == 1
     assert lookups["count"] == 2
     assert _narration_count(session_factory) == 1
+
+
+def test_generation_asks_for_prose_not_json(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+    fake_client: FakeNarrationClient,
+) -> None:
+    """旁白必须走「散文模式」，不能带 response_format=json_object。
+
+    真机实测（2026-11-23）：带 json_object 时模型返回 176 个 token 的纯空格，
+    校验判「0 个汉字」，重试三次后接口 422 —— 假 client 全绿也发现不了。
+    这条断言让「请求参数」本身成为被测对象。
+    """
+    public_id = _create_story(session_factory)
+    sequence = _advance(session_factory, public_id)
+
+    assert api_client.get(_url(public_id, sequence)).status_code == 200
+    assert fake_client.json_modes == [False]
+
+
+def test_whitespace_only_reply_is_rejected_and_writes_nothing(
+    api_client: TestClient,
+    session_factory: sessionmaker[Session],
+    fake_client: FakeNarrationClient,
+) -> None:
+    """模型吐纯空白就是退化输出，必须拒收且不落库。"""
+    fake_client.outputs = [" " * 200, " " * 200, " " * 200]
+    public_id = _create_story(session_factory)
+    sequence = _advance(session_factory, public_id)
+
+    response = api_client.get(_url(public_id, sequence))
+
+    assert response.status_code == 422
+    assert response.json()["code"] == 42202
+    assert len(fake_client.calls) == 3
+    assert _narration_count(session_factory) == 0
